@@ -1,0 +1,7 @@
+^\.github$
+^README\.Rmd$
+^cran-comments\.md$
+^dev$
+^\.gitignore$
+^renv$
+^renv\.lock$

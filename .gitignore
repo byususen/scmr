@@ -1,0 +1,12 @@
+.Rhistory
+.RData
+.Rproj.user
+.Rcheck
+*.Rcheck
+*.tar.gz
+.DS_Store
+inst/reproducibility/private_data/
+*.csv
+*.rds
+!inst/reproducibility/*.md
+!inst/reproducibility/*.R

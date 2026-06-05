@@ -1,0 +1,845 @@
+---
+title: "scmr"
+output:
+  github_document:
+    toc: true
+    toc_depth: 3
+    df_print: tibble
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# scmr: Spatially Clustered Multinomial Regression
+
+`scmr` fits **spatially clustered multinomial regression** models for multiclass categorical responses observed over spatial units. The package was designed for reproducible simulation studies where the response is multinomial and the predictors may be high-dimensional and correlated. The main model combines:
+
+1. local multinomial elastic-net regression models,
+2. spatially constrained cluster membership,
+3. a Potts-style spatial smoothness term, and
+4. model-selection criteria including standard SCR-BIC and cluster-balanced CB-BIC.
+
+The package also includes a non-spatial global penalized multinomial benchmark. Both models are called through one main function, `fit_scmr()`.
+
+This repository intentionally contains **only synthetic-data simulation tools and examples**. It does not include private or restricted real data.
+
+## Installation
+
+Install the development version from GitHub:
+
+```{r install, eval=FALSE}
+# install.packages("remotes")
+remotes::install_github("byususen/scmr")
+```
+
+Load the package:
+
+```{r load-package, eval=FALSE}
+library(scmr)
+```
+
+## Main user interface
+
+The main function is:
+
+```{r main-api, eval=FALSE}
+fit_scmr(
+  x,
+  y,
+  model = c("scmr", "global"),
+  penalty = c("elastic_net", "lasso", "ridge"),
+  G = NULL,
+  unit_id = NULL,
+  coords = NULL,
+  alpha = NULL,
+  alpha_grid = NULL,
+  lambda = NULL,
+  control = scmr_control(),
+  initial_cluster = NULL,
+  nfolds = 5,
+  lambda_rule = c("lambda.1se", "lambda.min"),
+  seed = 123
+)
+```
+
+Use:
+
+- `model = "global"` for a global penalized multinomial benchmark.
+- `model = "scmr"` for spatially clustered multinomial regression.
+- `penalty = "ridge"` for alpha = 0.
+- `penalty = "lasso"` for alpha = 1.
+- `penalty = "elastic_net"` for alpha in `(0, 1]`, either fixed by `alpha` or tuned over `alpha_grid`.
+
+## Required data structure
+
+`scmr` expects a prepared model matrix and aligned response/spatial objects. It does not require a raw survey or remote-sensing table.
+
+### Global model
+
+For `model = "global"`, the required objects are:
+
+| Object | Type | Dimension | Description |
+|---|---|---:|---|
+| `x` | numeric matrix or sparse `Matrix` | `n_observations × p_predictors` | Predictor matrix |
+| `y` | factor or character vector | `n_observations` | Multiclass response |
+
+Example:
+
+```{r data-global, eval=FALSE}
+X <- model.matrix(~ phase_lag1 + month_factor + NDVI + EVI + RVI - 1, data = df)
+y <- factor(df$phase)
+
+fit_global <- fit_scmr(
+  x = X,
+  y = y,
+  model = "global",
+  penalty = "elastic_net",
+  alpha_grid = c(0.6, 0.7, 0.8),
+  lambda_rule = "lambda.1se",
+  nfolds = 5,
+  seed = 123
+)
+```
+
+### SCMR model
+
+For `model = "scmr"`, the required objects are:
+
+| Object | Type | Dimension | Description |
+|---|---|---:|---|
+| `x` | numeric matrix or sparse `Matrix` | `n_observations × p_predictors` | Predictor matrix |
+| `y` | factor or character vector | `n_observations` | Multiclass response |
+| `G` | integer | length 1 | Number of spatial clusters |
+| `unit_id` | character, factor, or integer vector | `n_observations` | Spatial unit identifier |
+| `coords` | numeric matrix or data frame | `n_observations × 2` | Coordinates for each row |
+
+The row order must be aligned:
+
+```{r row-alignment, eval=FALSE}
+x[i, ]      # predictors for row i
+y[i]        # response for row i
+unit_id[i]  # spatial unit of row i
+coords[i, ] # coordinate of row i
+```
+
+Repeated rows per spatial unit are allowed. All observations with the same `unit_id` are assigned to the same spatial cluster. For panel data, `unit_id` should usually be the permanent spatial unit identifier.
+
+Example:
+
+```{r data-scmr, eval=FALSE}
+df$phase <- factor(df$phase)
+df$phase_lag1 <- factor(df$phase_lag1)
+df$month_factor <- factor(df$month)
+
+X <- model.matrix(
+  ~ phase_lag1 + month_factor + NDVI + EVI + RVI - 1,
+  data = df
+)
+
+y <- df$phase
+unit_id <- df$id_subsegmen
+coords <- as.matrix(df[, c("lati_mean", "long_mean")])
+
+fit_spatial <- fit_scmr(
+  x = X,
+  y = y,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_id,
+  coords = coords,
+  alpha_grid = c(0.6, 0.7, 0.8),
+  control = scmr_control(
+    phi = 1,
+    k_neighbors = 5,
+    min_units = 10,
+    min_per_class = 5,
+    max_iter = 10
+  ),
+  seed = 123
+)
+```
+
+## Quick start with synthetic data
+
+The package includes `simulate_scmr_data()` for fully reproducible examples. The simulated data are public and safe to share.
+
+```{r quick-start-simulate, eval=FALSE}
+library(scmr)
+
+set.seed(1)
+
+dat <- simulate_scmr_data(
+  n_obs = 1200,
+  n_new = 200,
+  p = 25,
+  active = 1:5,
+  eta = 0.2,
+  scenario = "clustered_balanced",
+  seed = 1000
+)
+
+obs <- dat$observed
+str(obs)
+```
+
+`obs` contains:
+
+| Element | Description |
+|---|---|
+| `obs$X` | predictor matrix |
+| `obs$y` | class labels |
+| `obs$coords` | two-column spatial coordinates |
+| `obs$unit` | spatial unit ID |
+| `obs$region` | true simulation region, useful for diagnostics |
+| `obs$beta` | true coefficients, simulation-only |
+| `obs$prob` | true class probabilities, simulation-only |
+
+For model fitting, only `X`, `y`, `coords`, and `unit` are required.
+
+## Train/test split
+
+Use `make_stratified_split()` to create a stratified test set. If `region` is supplied, the split is stratified by region and class.
+
+```{r split, eval=FALSE}
+test_idx <- make_stratified_split(
+  y = obs$y,
+  region = obs$region,
+  test_prop = 0.30,
+  seed = 2024
+)
+
+train_idx <- setdiff(seq_along(obs$y), test_idx)
+
+X_train <- obs$X[train_idx, , drop = FALSE]
+X_test  <- obs$X[test_idx, , drop = FALSE]
+
+y_train <- obs$y[train_idx]
+y_test  <- obs$y[test_idx]
+
+unit_train <- obs$unit[train_idx]
+unit_test  <- obs$unit[test_idx]
+
+coords_train <- obs$coords[train_idx, , drop = FALSE]
+coords_test  <- obs$coords[test_idx, , drop = FALSE]
+```
+
+## Fitting the global benchmark
+
+### Elastic net
+
+```{r fit-global-enet, eval=FALSE}
+fit_global_enet <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "global",
+  penalty = "elastic_net",
+  alpha_grid = c(0.6, 0.7, 0.8),
+  lambda_rule = "lambda.1se",
+  nfolds = 5,
+  seed = 2024
+)
+
+fit_global_enet
+```
+
+### Lasso
+
+```{r fit-global-lasso, eval=FALSE}
+fit_global_lasso <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "global",
+  penalty = "lasso",
+  lambda_rule = "lambda.1se",
+  nfolds = 5,
+  seed = 2024
+)
+```
+
+### Ridge
+
+```{r fit-global-ridge, eval=FALSE}
+fit_global_ridge <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "global",
+  penalty = "ridge",
+  lambda_rule = "lambda.1se",
+  nfolds = 5,
+  seed = 2024
+)
+```
+
+### Fixed alpha and lambda
+
+Use a fixed `lambda` when you want exact reproducibility without cross-validation.
+
+```{r fit-global-fixed, eval=FALSE}
+fit_global_fixed <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "global",
+  penalty = "elastic_net",
+  alpha = 0.7,
+  lambda = 0.01,
+  seed = 2024
+)
+```
+
+## Fitting SCMR
+
+### Basic SCMR elastic-net model
+
+```{r fit-scmr-basic, eval=FALSE}
+ctrl <- scmr_control(
+  phi = 1,
+  k_neighbors = 5,
+  weight_type = "binary",
+  max_iter = 10,
+  init_method = "kmeans",
+  init_tries = 100,
+  update_order = "random",
+  min_units = 10,
+  min_per_class = 5,
+  tune_lambda = TRUE,
+  tune_alpha_after_convergence = TRUE
+)
+
+fit_spatial_enet <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  alpha_grid = c(0.6, 0.7, 0.8),
+  control = ctrl,
+  seed = 2024
+)
+
+fit_spatial_enet
+```
+
+### SCMR with lasso penalty
+
+```{r fit-scmr-lasso, eval=FALSE}
+fit_spatial_lasso <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "lasso",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  control = ctrl,
+  seed = 2024
+)
+```
+
+### SCMR with ridge penalty
+
+```{r fit-scmr-ridge, eval=FALSE}
+fit_spatial_ridge <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "ridge",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  control = ctrl,
+  seed = 2024
+)
+```
+
+### SCMR with fixed alpha and fixed lambda
+
+If `lambda` is supplied, SCMR skips initial lambda tuning and uses the supplied value. For SCMR, `lambda` can be either a scalar or a vector of length `G`.
+
+```{r fit-scmr-fixed-lambda, eval=FALSE}
+fit_spatial_fixed <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  alpha = 0.7,
+  lambda = 0.01,
+  control = scmr_control(
+    phi = 1,
+    k_neighbors = 5,
+    min_units = 10,
+    min_per_class = 5,
+    max_iter = 10,
+    tune_lambda = FALSE,
+    tune_alpha_after_convergence = FALSE
+  ),
+  seed = 2024
+)
+```
+
+Cluster-specific fixed lambda values:
+
+```{r fit-scmr-cluster-lambda, eval=FALSE}
+fit_spatial_cluster_lambda <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  alpha = 0.7,
+  lambda = c(0.02, 0.01, 0.01, 0.005),
+  control = scmr_control(
+    tune_lambda = FALSE,
+    tune_alpha_after_convergence = FALSE
+  ),
+  seed = 2024
+)
+```
+
+## Important control arguments
+
+`scmr_control()` controls the spatial clustering and local model-fitting algorithm.
+
+| Argument | Default | Meaning |
+|---|---:|---|
+| `phi` | `1` | Spatial smoothness coefficient |
+| `k_neighbors` | `5` | Number of nearest neighbors for spatial weights |
+| `weight_type` | `"binary"` | Spatial weight type, either `"binary"` or `"exp"` |
+| `weight_bandwidth` | `NULL` | Bandwidth for exponential weights |
+| `row_standardize_weights` | `FALSE` | Whether to row-standardize spatial weights |
+| `max_iter` | `10` | Maximum SCMR membership-update iterations |
+| `init_method` | `"kmeans"` | Initial cluster method, either `"kmeans"` or `"random"` |
+| `init_tries` | `200` | Number of initialization attempts |
+| `update_order` | `"random"` | Unit update order, either `"random"` or `"fixed"` |
+| `min_units` | `10` | Minimum unique spatial units per cluster |
+| `min_per_class` | `5` | Minimum observations per class per cluster |
+| `tune_lambda` | `TRUE` | Whether to tune cluster-local lambda values |
+| `tune_alpha_after_convergence` | `TRUE` | Whether to retune alpha after membership convergence |
+| `holdout_val_prop` | `0.30` | Validation proportion for holdout tuning |
+| `holdout_nlambda` | `60` | Number of lambda values in the holdout path |
+| `local_lambda_factors` | `c(3, 2, 1, 1/2, 1/3)` | Local search multipliers around current lambda |
+| `criterion_balance_gamma` | `1` | Balance exponent in CB-BIC |
+
+Example with more explicit settings:
+
+```{r control-detail, eval=FALSE}
+ctrl <- scmr_control(
+  phi = 1,
+  k_neighbors = 5,
+  weight_type = "binary",
+  max_iter = 10,
+  init_method = "kmeans",
+  init_tries = 200,
+  update_order = "random",
+  min_units = 10,
+  min_per_class = 5,
+  holdout_val_prop = 0.30,
+  holdout_nlambda = 60,
+  lambda_1se_tol = 0.002,
+  lambda_update_tol = 0.001,
+  alpha_update_tol = 0.003,
+  local_lambda_factors = c(3, 2, 1, 1/2, 1/3),
+  final_alpha_delta = c(-0.1, 0, 0.1),
+  tiny_movement_max_units = 5,
+  tiny_movement_rate_tol = 0.001,
+  tiny_movement_revert = TRUE,
+  criterion_balance_gamma = 1
+)
+```
+
+## Initial cluster labels
+
+You can supply an initial partition with `initial_cluster`. The vector must have one label per **unique spatial unit**, not one label per observation row.
+
+```{r initial-cluster, eval=FALSE}
+unique_units <- levels(factor(unit_train))
+
+initial_cluster <- sample(
+  x = 1:4,
+  size = length(unique_units),
+  replace = TRUE
+)
+
+fit_init <- fit_scmr(
+  x = X_train,
+  y = y_train,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_train,
+  coords = coords_train,
+  initial_cluster = initial_cluster,
+  control = ctrl,
+  seed = 2024
+)
+```
+
+The supplied partition must satisfy the feasibility constraints defined by `min_units` and `min_per_class`.
+
+## Prediction
+
+### Global model prediction
+
+```{r predict-global, eval=FALSE}
+prob_global <- predict(fit_global_enet, newx = X_test, type = "prob")
+pred_global <- predict(fit_global_enet, newx = X_test, type = "class")
+```
+
+### SCMR prediction
+
+SCMR prediction needs the test predictors, test spatial unit IDs, and test coordinates.
+
+```{r predict-scmr, eval=FALSE}
+prob_scmr <- predict(
+  fit_spatial_enet,
+  newx = X_test,
+  new_unit_id = unit_test,
+  new_coords = coords_test,
+  type = "prob"
+)
+
+pred_scmr <- predict(
+  fit_spatial_enet,
+  newx = X_test,
+  new_unit_id = unit_test,
+  new_coords = coords_test,
+  type = "class"
+)
+```
+
+To obtain cluster-membership probabilities for new units:
+
+```{r predict-membership, eval=FALSE}
+pp_test <- predict(
+  fit_spatial_enet,
+  newx = X_test,
+  new_unit_id = unit_test,
+  new_coords = coords_test,
+  type = "membership"
+)
+
+head(pp_test)
+```
+
+## Evaluation metrics
+
+Use `calc_overall_metrics()` and `calc_class_metrics()`.
+
+```{r metrics, eval=FALSE}
+classes <- levels(y_train)
+
+overall_global <- calc_overall_metrics(
+  y_true = y_test,
+  y_pred = pred_global,
+  prob = prob_global,
+  classes = classes
+)
+
+overall_scmr <- calc_overall_metrics(
+  y_true = y_test,
+  y_pred = pred_scmr,
+  prob = prob_scmr,
+  classes = classes
+)
+
+rbind(
+  global = overall_global,
+  scmr = overall_scmr
+)
+```
+
+Per-class metrics:
+
+```{r class-metrics, eval=FALSE}
+calc_class_metrics(
+  y_true = y_test,
+  y_pred = pred_scmr,
+  classes = classes
+)
+```
+
+## Model-selection criteria
+
+Fitted objects store model criteria.
+
+```{r criteria, eval=FALSE}
+fit_global_enet$criteria
+fit_spatial_enet$criteria
+```
+
+For SCMR, useful fields include:
+
+| Field | Meaning |
+|---|---|
+| `CriterionSCR_BIC_original` | Standard SCR-BIC-type criterion |
+| `CriterionV3_CB_BIC` or `CriterionV3_CB_uBIC` | Cluster-balanced criterion, depending on object version |
+| `df_original_total` | Full parameter-count degrees of freedom |
+| `df_effective_total` | Elastic-net effective degrees of freedom |
+| `CBuBIC_Fit` | Cluster-balanced fit component |
+| `CBuBIC_Penalty` | Cluster-balanced penalty component |
+| `cluster_components` | Cluster-level diagnostic table |
+
+Because object field names can change during development, inspect available fields with:
+
+```{r inspect-criteria, eval=FALSE}
+names(fit_spatial_enet$criteria)
+```
+
+## Reproducible simulation study
+
+A complete simulation driver is included in:
+
+```text
+inst/scripts/01_run_simulation_study.R
+```
+
+You can run it from the package root:
+
+```{r run-script, eval=FALSE}
+source("inst/scripts/01_run_simulation_study.R")
+```
+
+A minimal simulation loop is shown below.
+
+```{r simulation-loop, eval=FALSE}
+scenarios <- c("global", "clustered_balanced", "clustered_imbalanced")
+G_grid <- 1:6
+n_repeats <- 5
+
+results <- list()
+
+for (rr in seq_len(n_repeats)) {
+  for (scenario in scenarios) {
+    dat <- simulate_scmr_data(
+      n_obs = 1200,
+      n_new = 200,
+      p = 25,
+      active = 1:5,
+      eta = 0.2,
+      scenario = scenario,
+      seed = 1000 + rr
+    )
+
+    obs <- dat$observed
+
+    test_idx <- make_stratified_split(
+      y = obs$y,
+      region = obs$region,
+      test_prop = 0.30,
+      seed = 2000 + rr
+    )
+
+    train_idx <- setdiff(seq_along(obs$y), test_idx)
+
+    X_train <- obs$X[train_idx, , drop = FALSE]
+    X_test  <- obs$X[test_idx, , drop = FALSE]
+    y_train <- obs$y[train_idx]
+    y_test  <- obs$y[test_idx]
+    unit_train <- obs$unit[train_idx]
+    unit_test  <- obs$unit[test_idx]
+    coords_train <- obs$coords[train_idx, , drop = FALSE]
+    coords_test  <- obs$coords[test_idx, , drop = FALSE]
+
+    fit_g <- fit_scmr(
+      X_train,
+      y_train,
+      model = "global",
+      penalty = "elastic_net",
+      alpha_grid = c(0.6, 0.7, 0.8),
+      seed = 3000 + rr
+    )
+
+    pred_g <- predict(fit_g, X_test, type = "class")
+    prob_g <- predict(fit_g, X_test, type = "prob")
+
+    results[[length(results) + 1]] <- data.frame(
+      Repeat = rr,
+      Scenario = scenario,
+      Model = "global",
+      G = 1,
+      calc_overall_metrics(y_test, pred_g, prob_g, levels(y_train))
+    )
+
+    for (G in G_grid) {
+      fit_s <- fit_scmr(
+        X_train,
+        y_train,
+        model = "scmr",
+        penalty = "elastic_net",
+        G = G,
+        unit_id = unit_train,
+        coords = coords_train,
+        alpha_grid = c(0.6, 0.7, 0.8),
+        control = scmr_control(
+          phi = 1,
+          k_neighbors = 5,
+          min_units = 10,
+          min_per_class = 5,
+          max_iter = 10
+        ),
+        seed = 4000 + 100 * rr + G
+      )
+
+      pred_s <- predict(
+        fit_s,
+        X_test,
+        new_unit_id = unit_test,
+        new_coords = coords_test,
+        type = "class"
+      )
+
+      prob_s <- predict(
+        fit_s,
+        X_test,
+        new_unit_id = unit_test,
+        new_coords = coords_test,
+        type = "prob"
+      )
+
+      results[[length(results) + 1]] <- data.frame(
+        Repeat = rr,
+        Scenario = scenario,
+        Model = "scmr",
+        G = G,
+        calc_overall_metrics(y_test, pred_s, prob_s, levels(y_train))
+      )
+    }
+  }
+}
+
+results <- do.call(rbind, results)
+head(results)
+```
+
+## Using your own data without publishing it
+
+Your private data should be transformed locally into the required modeling objects:
+
+```{r own-data-template, eval=FALSE}
+# Private local table. Do not commit this file to GitHub.
+df <- read.csv("path/to/private_data.csv")
+
+# Example response and predictors.
+df$y <- factor(df$y)
+df$lag_y <- factor(df$lag_y)
+df$month_factor <- factor(df$month)
+
+X <- model.matrix(
+  ~ lag_y + month_factor + predictor_1 + predictor_2 + predictor_3 - 1,
+  data = df
+)
+
+y <- df$y
+unit_id <- df$spatial_unit_id
+coords <- as.matrix(df[, c("latitude", "longitude")])
+
+fit <- fit_scmr(
+  x = X,
+  y = y,
+  model = "scmr",
+  penalty = "elastic_net",
+  G = 4,
+  unit_id = unit_id,
+  coords = coords,
+  control = scmr_control(min_units = 10, min_per_class = 5),
+  seed = 123
+)
+```
+
+Recommended repository practice:
+
+- Commit scripts that create `X`, `y`, `unit_id`, and `coords`.
+- Do **not** commit restricted raw data.
+- Include a small synthetic example or anonymized toy dataset if needed.
+- Add private file patterns to `.gitignore`, for example:
+
+```text
+private_data/
+*.csv
+*.rds
+*.RData
+```
+
+If your reproducibility workflow needs real-data results but not real data, commit only aggregated tables that do not identify units or reveal restricted values.
+
+## Saving outputs
+
+The package returns R objects directly. A simple reproducibility script can save results as CSV/RDS.
+
+```{r save-results, eval=FALSE}
+saveRDS(fit_spatial_enet, "outputs/fit_spatial_enet.rds")
+write.csv(overall_scmr, "outputs/test_metrics_scmr.csv", row.names = FALSE)
+```
+
+To save SCMR cluster membership for later analysis:
+
+```{r save-membership, eval=FALSE}
+pp_train <- fit_spatial_enet$PP_unit
+
+membership_obj <- list(
+  metadata = list(
+    ModelType = "SCMR",
+    Repeat = 1,
+    FixedK = fit_spatial_enet$G
+  ),
+  unit = rownames(pp_train),
+  cluster = as.integer(fit_spatial_enet$group_unit[rownames(pp_train)]),
+  latitude = fit_spatial_enet$train_unit_coords[, 1],
+  longitude = fit_spatial_enet$train_unit_coords[, 2],
+  membership_matrix = pp_train
+)
+
+saveRDS(membership_obj, "outputs/scmr_membership_G4.rds", compress = "xz")
+```
+
+Read compact membership files back into long format:
+
+```{r read-membership, eval=FALSE}
+membership_long <- compact_membership_to_long("outputs/scmr_membership_G4.rds")
+head(membership_long)
+```
+
+## Development workflow
+
+Clone the repository, then run:
+
+```{r dev-workflow, eval=FALSE}
+install.packages(c("devtools", "roxygen2", "testthat"))
+
+devtools::document()
+devtools::check()
+```
+
+Build this README from `README.Rmd`:
+
+```{r build-readme, eval=FALSE}
+devtools::build_readme()
+```
+
+Run tests:
+
+```{r test, eval=FALSE}
+devtools::test()
+```
+
+## Citation
+
+If you use this package in academic work, please cite the associated manuscript or dissertation chapter describing SCMR. A package citation file can be added later in `inst/CITATION`.
+
+## License
+
+See `LICENSE` for license details.
