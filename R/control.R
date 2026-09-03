@@ -13,7 +13,7 @@
 #' @param lambda_rule Selection rule for global `cv.glmnet()`, usually `"lambda.1se"` or `"lambda.min"`.
 #' @param holdout_val_prop Validation proportion for cluster-local holdout tuning.
 #' @param holdout_nlambda Number of lambda values in the initial holdout path.
-#' @param lambda_1se_tol Tolerance for the largest-lambda 1-SE-like holdout rule.
+#' @param lambda_1se_tol Fixed loss tolerance for choosing the largest acceptable holdout lambda; not a standard error.
 #' @param lambda_update_tol Minimum validation-loss improvement needed to update local lambda.
 #' @param alpha_update_tol Minimum validation-loss improvement needed to update alpha after convergence.
 #' @param local_lambda_factors Multipliers around current lambda for local lambda updates.
@@ -28,6 +28,11 @@
 #' @param tiny_movement_rate_tol Relative moved-unit rate treated as a tiny update.
 #' @param tiny_movement_revert If `TRUE`, revert the final tiny movement before stopping.
 #' @param criterion_balance_gamma Cluster-balance exponent used in CB-BIC.
+#' @param glmnet_maxit Maximum iterations for a glmnet fit.
+#' @param multinom_maxit Maximum iterations for an unpenalized multinomial fit.
+#' @param multinom_maxnwts Maximum weights for the unpenalized multinomial engine.
+#' @param selection_tol Absolute native-coefficient support threshold.
+#' @param verbose Print iteration progress when true.
 #' @return A named list of control settings.
 #' @export
 scmr_control <- function(
@@ -58,12 +63,17 @@ scmr_control <- function(
     tiny_movement_max_units = 5,
     tiny_movement_rate_tol = 0.001,
     tiny_movement_revert = TRUE,
-    criterion_balance_gamma = 1) {
+    criterion_balance_gamma = 1,
+    glmnet_maxit = 100000,
+    multinom_maxit = 1000,
+    multinom_maxnwts = 200000,
+    selection_tol = 1e-8,
+    verbose = FALSE) {
   weight_type <- match.arg(weight_type)
   init_method <- match.arg(init_method)
   update_order <- match.arg(update_order)
 
-  list(
+  out <- list(
     phi = phi,
     k_neighbors = k_neighbors,
     weight_type = weight_type,
@@ -91,14 +101,77 @@ scmr_control <- function(
     tiny_movement_max_units = tiny_movement_max_units,
     tiny_movement_rate_tol = tiny_movement_rate_tol,
     tiny_movement_revert = tiny_movement_revert,
-    criterion_balance_gamma = criterion_balance_gamma
+    criterion_balance_gamma = criterion_balance_gamma,
+    glmnet_maxit = glmnet_maxit,
+    multinom_maxit = multinom_maxit,
+    multinom_maxnwts = multinom_maxnwts,
+    selection_tol = selection_tol,
+    verbose = verbose
   )
+  validate_scmr_control(out)
+  out
 }
 
-resolve_penalty_alpha <- function(penalty = c("elastic_net", "lasso", "ridge"),
+validate_scmr_control <- function(control) {
+  for (nm in c("standardize", "row_standardize_weights", "tune_lambda", "tune_alpha_after_convergence",
+               "tiny_movement_revert", "verbose")) {
+    if (!is.logical(control[[nm]]) || length(control[[nm]]) != 1L || is.na(control[[nm]])) {
+      stop(nm, " must be TRUE or FALSE.", call. = FALSE)
+    }
+  }
+  choices <- list(weight_type = c("binary", "exp"), init_method = c("kmeans", "random"),
+    update_order = c("random", "fixed"), lambda_rule = c("lambda.min", "lambda.1se"),
+    type_multinomial = c("grouped", "ungrouped"))
+  for (nm in names(choices)) {
+    if (length(control[[nm]]) != 1L || !control[[nm]] %in% choices[[nm]]) stop("Invalid ", nm, call. = FALSE)
+  }
+  integer_fields <- c("k_neighbors", "max_iter", "init_tries", "holdout_nlambda",
+                      "min_units", "glmnet_maxit", "multinom_maxit", "multinom_maxnwts")
+  for (nm in integer_fields) {
+    z <- control[[nm]]
+    if (length(z) != 1L || !is.finite(z) || z < 1 || z != floor(z)) {
+      stop(nm, " must be a positive integer.", call. = FALSE)
+    }
+  }
+  for (nm in c("phi", "lambda_1se_tol", "lambda_update_tol", "alpha_update_tol",
+               "tiny_movement_max_units", "tiny_movement_rate_tol",
+               "criterion_balance_gamma", "selection_tol")) {
+    z <- control[[nm]]
+    if (length(z) != 1L || !is.finite(z) || z < 0) {
+      stop(nm, " must be finite and nonnegative.", call. = FALSE)
+    }
+  }
+  if (length(control$holdout_val_prop) != 1L || !is.finite(control$holdout_val_prop) || control$holdout_val_prop <= 0 ||
+      control$holdout_val_prop >= 1) stop("holdout_val_prop must lie in (0, 1).", call. = FALSE)
+  if (!length(control$min_per_class) || any(!is.finite(control$min_per_class)) ||
+      any(control$min_per_class < 1 | control$min_per_class != floor(control$min_per_class))) {
+    stop("min_per_class must contain positive integers.", call. = FALSE)
+  }
+  if (!control$type_multinomial %in% c("grouped", "ungrouped")) {
+    stop("type_multinomial must be grouped or ungrouped.", call. = FALSE)
+  }
+  if (!length(control$alpha_grid) || any(!is.finite(control$alpha_grid)) ||
+      any(control$alpha_grid < 0 | control$alpha_grid > 1)) stop("Invalid alpha_grid.", call. = FALSE)
+  if (!length(control$local_lambda_factors) || any(!is.finite(control$local_lambda_factors)) ||
+      any(control$local_lambda_factors <= 0)) stop("Invalid local_lambda_factors.", call. = FALSE)
+  if (!length(control$final_alpha_delta) || any(!is.finite(control$final_alpha_delta))) {
+    stop("Invalid final_alpha_delta.", call. = FALSE)
+  }
+  if (!is.null(control$weight_bandwidth) &&
+      (length(control$weight_bandwidth) != 1L || !is.finite(control$weight_bandwidth) ||
+       control$weight_bandwidth <= 0)) stop("weight_bandwidth must be positive.", call. = FALSE)
+  invisible(control)
+}
+
+resolve_penalty_alpha <- function(penalty = c("elastic_net", "lasso", "ridge", "none"),
                                   alpha = NULL,
                                   alpha_grid = NULL) {
   penalty <- match.arg(penalty)
+  if (!is.null(alpha) && (length(alpha) != 1L || !is.finite(alpha))) stop("alpha must be a finite scalar.", call. = FALSE)
+  if (penalty == "none") {
+    if (!is.null(alpha)) stop("alpha is not used with penalty = 'none'.", call. = FALSE)
+    return(list(penalty = penalty, alpha_grid = numeric(), alpha_default = NA_real_))
+  }
 
   if (penalty == "ridge") {
     if (!is.null(alpha) && any(abs(as.numeric(alpha)) > .Machine$double.eps^0.5)) {
@@ -122,7 +195,10 @@ resolve_penalty_alpha <- function(penalty = c("elastic_net", "lasso", "ridge"),
     ag <- c(0.6, 0.7, 0.8)
   }
 
-  ag <- sort(unique(ag[is.finite(ag) & ag > 0 & ag <= 1]))
-  if (length(ag) == 0) stop("Elastic-net alpha values must be in (0, 1].", call. = FALSE)
+  if (!length(ag) || any(!is.finite(ag) | ag <= 0 | ag > 1)) {
+    stop("Elastic-net alpha values must be in (0, 1].", call. = FALSE)
+  }
+  ag <- sort(unique(ag))
+  if (!is.null(alpha) && length(ag) != 1L) stop("alpha must be a scalar.", call. = FALSE)
   list(penalty = penalty, alpha_grid = ag, alpha_default = stats::median(ag))
 }

@@ -1,13 +1,13 @@
 Package: scmr
 Title: Spatially Clustered Multinomial Regression
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(
     person("Bayu", "Suseno", role = c("aut", "cre"), email = "byususen@users.noreply.github.com"),
     person("SCMR study contributors", role = "ctb")
   )
 Description: Implements spatially clustered multinomial regression (SCMR) and
-    global penalized multinomial regression benchmarks for multiclass
-    categorical outcomes with spatial heterogeneity. The package supports ridge,
+    global and fixed-membership multinomial regression benchmarks for multiclass
+    categorical outcomes with spatial heterogeneity. The package supports unpenalized fitting, ridge,
     lasso, and elastic-net penalties, user-specified alpha and lambda values,
     user-controlled numbers of spatial clusters, feasible initialization, and
     synthetic-data simulation scripts for reproducible methodological studies.
@@ -15,22 +15,20 @@ Description: Implements spatially clustered multinomial regression (SCMR) and
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.1
 Depends:
     R (>= 4.2.0)
 Imports:
     glmnet,
     Matrix,
     MASS,
+    nnet,
+    methods,
     stats,
     utils
 Suggests:
     testthat (>= 3.0.0),
-    knitr,
-    rmarkdown,
-    readr,
-    ggplot2
+    knitr
 Config/testthat/edition: 3
-VignetteBuilder: knitr
 URL: https://github.com/byususen/scmr
 BugReports: https://github.com/byususen/scmr/issues

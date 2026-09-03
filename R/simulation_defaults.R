@@ -1,0 +1,26 @@
+simulation_defaults <- function() {
+  list(domain_s1_range = c(-1, 1), domain_s2_range = c(0, 2), domain_exclusion_s1_weight = 1,
+      domain_exclusion_s2_weight = 0.5, domain_exclusion_radius = 0.5,
+      region_s1_split = 0, region_s2_breaks = c(0, 0.666666666666667,
+      1.33333333333333, 2), gp_nugget = 1e-08, predictor_gp_tau2 = 1,
+      predictor_rho_active = 0.5, predictor_rho_inactive = 0.1,
+      predictor_eta_scale = 0.3, predictor_kernel_power = 2, beta_global_class1_base = c(0.5,
+      -0.45, 0.4, -0.35, 0.3), beta_global_class2_base = c(-0.45,
+      0.4, -0.35, 0.3, -0.25), beta_cluster_class1_base = c(0.9,
+      -0.8, 0.7, -0.6, 0.5), beta_cluster_class2_base = c(-0.8,
+      0.7, -0.6, 0.5, -0.4), beta_global_intercept_class1 = 0.3,
+      beta_global_intercept_class2 = -0.3, beta_cluster_g1_values = c(-1,
+      0), beta_cluster_g2_values = c(0, 0.666666666666667, 1.33333333333333
+      ), beta_cluster_q1_offset = -0.25, beta_cluster_q2_offset = 0.25,
+      beta_cluster_intercept_scale_class1 = 0.8, beta_cluster_intercept_scale_class2 = -0.7,
+      class_imbalance_shift_three = c(1, 0, -1), class_imbalance_shift_range_general = c(0.9,
+      -0.9), region_levels6 = c("R11", "R12", "R13", "R21", "R22",
+      "R23"), cluster_member_probs_balanced = c(R11 = 0.166666666666667,
+      R12 = 0.166666666666667, R13 = 0.166666666666667, R21 = 0.166666666666667,
+      R22 = 0.166666666666667, R23 = 0.166666666666667), cluster_member_probs_imbalanced = c(R11 = 0.277777777777778,
+      R12 = 0.222222222222222, R13 = 0.222222222222222, R21 = 0.166666666666667,
+      R22 = 0.0555555555555556, R23 = 0.0555555555555556), smooth_psi_intercept = c(0.7,
+      0.9), smooth_psi_active_min = 0.5, smooth_psi_active_max = 1.3,
+      smooth_beta_tau2_intercept = 0.8, smooth_beta_tau2_active = 0.8,
+      smooth_center_gp = TRUE)
+}

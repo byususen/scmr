@@ -20,6 +20,10 @@ build_unit_weights <- function(coords, k = 5, weight_type = c("binary", "exp"),
     if (is.null(bandwidth)) {
       kth_dist <- dmat[cbind(seq_len(n), nn_index[, k])]
       bandwidth <- stats::median(kth_dist, na.rm = TRUE)
+      if (!is.finite(bandwidth) || bandwidth <= 0) {
+        positive <- dmat[is.finite(dmat) & dmat > 0]
+        bandwidth <- if (length(positive)) min(positive) else 1
+      }
     }
     bandwidth_used <- bandwidth
     for (i in seq_len(n)) {
@@ -33,6 +37,8 @@ build_unit_weights <- function(coords, k = 5, weight_type = c("binary", "exp"),
     rs <- rowSums(w)
     rs[rs == 0] <- 1
     w <- w / rs
+    # Use an undirected graph for both membership scores and the Potts objective.
+    if (symmetrize) w <- (w + t(w)) / 2
   }
 
   list(W = Matrix::Matrix(w, sparse = TRUE), bandwidth_used = bandwidth_used)
@@ -45,6 +51,9 @@ get_unit_coords <- function(unit_id, coords) {
     ycoord = coords[, 2],
     stringsAsFactors = FALSE
   ))
+  if (anyDuplicated(coord_df$unit)) {
+    stop("Each spatial unit must have exactly one coordinate pair.", call. = FALSE)
+  }
   unit_levels <- levels(factor(unit_id))
   coord_df <- coord_df[match(unit_levels, coord_df$unit), , drop = FALSE]
   as.matrix(coord_df[, c("xcoord", "ycoord"), drop = FALSE])
@@ -56,6 +65,11 @@ resolve_min_class <- function(min_class, class_levels) {
     out <- rep(as.integer(min_class), k)
     names(out) <- class_levels
     return(out)
+  }
+  if (length(min_class) != k) stop("min_per_class must be scalar or have one value per class.", call. = FALSE)
+  if (!is.null(names(min_class))) {
+    if (!setequal(names(min_class), class_levels)) stop("min_per_class names must match classes.", call. = FALSE)
+    min_class <- min_class[class_levels]
   }
   out <- as.integer(min_class)
   names(out) <- class_levels
@@ -145,6 +159,7 @@ initialize_feasible_groups <- function(unit_coords, G, unit_total, unit_class,
   }
 
   coords_scaled <- scale(unit_coords)
+  coords_scaled[!is.finite(coords_scaled)] <- 0
 
   for (tt in seq_len(tries)) {
     if (method == "kmeans") {

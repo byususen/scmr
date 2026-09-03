@@ -18,7 +18,7 @@ compact_membership_to_long <- function(rds_file) {
     Cluster = rep(seq_len(G), times = length(unit_names)),
     Latitude = rep(obj$latitude, each = G),
     Longitude = rep(obj$longitude, each = G),
-    MembershipProbability = as.numeric(PP),
+    MembershipProbability = as.numeric(t(PP)),
     stringsAsFactors = FALSE
   )
 }
