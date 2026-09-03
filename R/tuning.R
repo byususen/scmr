@@ -1,160 +1,155 @@
+# Holdout tuning returns tables; the study adds labels and writes files.
 make_holdout_validation_split <- function(y, val_prop = 0.30, seed = 123) {
-  set.seed(seed)
-  y <- factor(y)
-  idx_all <- seq_along(y)
-  split_idx <- split(idx_all, y)
-  val_idx <- unlist(lapply(split_idx, function(idx) {
-    n <- length(idx)
-    if (n <= 3) return(idx[1])
-    n_val <- max(1, floor(val_prop * n))
-    n_val <- min(n_val, n - 2)
-    sample(idx, size = n_val)
-  }))
-  val_idx <- sort(unique(val_idx))
-  list(train_idx = setdiff(idx_all, val_idx), val_idx = val_idx)
+  with_scmr_seed(seed, {
+    strata <- split(seq_along(y), factor(y))
+    val <- unlist(lapply(strata, function(idx) {
+      if (length(idx) < 3L) return(integer())
+      nval <- min(max(1L, floor(val_prop * length(idx))), length(idx) - 2L)
+      idx[sample.int(length(idx), nval)]
+    }), use.names = FALSE)
+    if (!length(val)) stop("Insufficient class support for a holdout split.", call. = FALSE)
+    list(train_idx = setdiff(seq_along(y), val), val_idx = sort(val))
+  })
 }
 
 path_logloss_by_lambda <- function(fit, x_val, y_val, lambda_values, class_levels) {
-  arr <- stats::predict(fit, newx = x_val, s = lambda_values, type = "response")
-  out <- rep(Inf, length(lambda_values))
-  if (length(dim(arr)) == 3) {
-    for (li in seq_along(lambda_values)) {
-      prob <- arr[, , li, drop = FALSE]
-      prob <- prob[, , 1]
-      if (is.null(colnames(prob)) && !is.null(dimnames(arr)[[2]])) colnames(prob) <- dimnames(arr)[[2]]
-      prob <- normalize_prob_matrix(prob, class_levels, length(y_val))
-      out[li] <- multiclass_logloss(prob, factor(y_val, levels = class_levels))
-    }
-  } else {
-    prob <- normalize_prob_matrix(as.matrix(arr), class_levels, length(y_val))
-    out[1] <- multiclass_logloss(prob, factor(y_val, levels = class_levels))
-  }
-  out
+  arr <- stats::predict(fit, newx = glmnet_design(x_val), s = lambda_values, type = "response")
+  if (length(dim(arr)) != 3L) stop("Unexpected multinomial prediction dimensions.", call. = FALSE)
+  vapply(seq_along(lambda_values), function(i) {
+    p <- matrix(arr[, , i, drop = FALSE], nrow = dim(arr)[1], ncol = dim(arr)[2],
+                dimnames = dimnames(arr)[1:2])
+    multiclass_logloss(p, y_val, class_levels)
+  }, numeric(1))
 }
 
 select_lambda_1se_like <- function(lambda_values, losses, tol = 0.002) {
-  lambda_values <- as.numeric(lambda_values)
-  losses <- as.numeric(losses)
-  ok <- is.finite(lambda_values) & lambda_values > 0 & is.finite(losses)
-  if (!any(ok)) return(list(lambda = NA_real_, loss = Inf, min_loss = Inf))
-  idx_ok <- which(ok)
-  min_pos <- idx_ok[which.min(losses[idx_ok])]
-  min_loss <- losses[min_pos]
-  eligible <- idx_ok[losses[idx_ok] <= min_loss + tol]
-  sel_pos <- eligible[which.max(lambda_values[eligible])]
-  list(lambda = lambda_values[sel_pos], loss = losses[sel_pos], min_loss = min_loss)
+  ok <- which(is.finite(lambda_values) & lambda_values > 0 & is.finite(losses))
+  if (!length(ok)) return(list(lambda = NA_real_, loss = Inf, min_loss = Inf, index = NA_integer_))
+  best <- ok[which.min(losses[ok])]
+  eligible <- ok[losses[ok] <= losses[best] + tol]
+  chosen <- eligible[which.max(lambda_values[eligible])]
+  list(lambda = lambda_values[chosen], loss = losses[chosen], min_loss = losses[best], index = chosen)
 }
 
-fast_holdout_tune_alpha_lambda <- function(x, y, alpha_grid, class_levels, control,
-                                           seed = 123) {
-  y <- factor(y, levels = class_levels)
-  split <- make_holdout_validation_split(y, val_prop = control$holdout_val_prop, seed = seed)
-  tr_idx <- split$train_idx
-  val_idx <- split$val_idx
-  rows <- list()
-  best <- list(alpha = NA_real_, lambda = NA_real_, loss = Inf, min_loss = Inf)
-  for (aa in alpha_grid) {
-    fit <- tryCatch({
-      glmnet::glmnet(
-        x = x[tr_idx, , drop = FALSE],
-        y = factor(y[tr_idx], levels = class_levels),
-        family = "multinomial", alpha = aa, nlambda = control$holdout_nlambda,
-        standardize = control$standardize, type.multinomial = control$type_multinomial,
-        maxit = 100000
-      )
-    }, error = function(e) e)
-    if (inherits(fit, "error")) next
-    lambda_values <- as.numeric(fit$lambda)
-    lambda_values <- lambda_values[is.finite(lambda_values) & lambda_values > 0]
-    losses <- tryCatch(
-      path_logloss_by_lambda(fit, x[val_idx, , drop = FALSE], y[val_idx], lambda_values, class_levels),
-      error = function(e) rep(Inf, length(lambda_values))
-    )
-    sel <- select_lambda_1se_like(lambda_values, losses, tol = control$lambda_1se_tol)
-    rows[[length(rows) + 1L]] <- data.frame(
-      Alpha = aa, LambdaSelected = sel$lambda,
-      HoldoutSelectedLoss = sel$loss, HoldoutMinLoss = sel$min_loss,
-      NumLambda = length(lambda_values), stringsAsFactors = FALSE
-    )
-    if (is.finite(sel$loss) && sel$loss < best$loss) {
-      best <- list(alpha = aa, lambda = sel$lambda, loss = sel$loss, min_loss = sel$min_loss)
+holdout_path <- function(x, y, alpha, control, seed, lambda_values = NULL) {
+  tryCatch({
+    split <- make_holdout_validation_split(y, control$holdout_val_prop, seed)
+    tr <- split$train_idx
+    va <- split$val_idx
+    warnings <- character()
+    path <- if (is.null(lambda_values)) NULL else
+      sort(unique(c(lambda_values * 10, lambda_values, lambda_values / 10)), decreasing = TRUE)
+    raw <- withCallingHandlers(glmnet::glmnet(
+      x = glmnet_design(x[tr, , drop = FALSE]), y = y[tr],
+      family = "multinomial", alpha = alpha, lambda = path,
+      nlambda = control$holdout_nlambda, standardize = control$standardize,
+      type.multinomial = control$type_multinomial, maxit = control$glmnet_maxit),
+      warning = function(w) {
+        warnings <<- c(warnings, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      })
+    lambdas <- if (is.null(lambda_values)) raw$lambda else lambda_values
+    loss <- path_logloss_by_lambda(raw, x[va, , drop = FALSE], y[va], lambdas, levels(y))
+    if (!is.null(raw$jerr) && raw$jerr != 0L) loss[] <- Inf
+    sel <- select_lambda_1se_like(lambdas, loss, control$lambda_1se_tol)
+    trace <- data.frame(Alpha = alpha, Lambda = lambdas, Loss = loss,
+                        Selected = seq_along(lambdas) == sel$index,
+                        NTrain = length(tr), NValidation = length(va),
+                        Status = if (is.finite(sel$loss)) "ok" else "solver_failure",
+                        Message = paste(warnings, collapse = ";"), stringsAsFactors = FALSE)
+    list(lambda = sel$lambda, loss = sel$loss, min_loss = sel$min_loss,
+         lambdas = lambdas, losses = loss, trace = trace)
+  }, error = function(e) list(lambda = NA_real_, loss = Inf, min_loss = Inf,
+      lambdas = numeric(), losses = numeric(),
+      trace = data.frame(Alpha = alpha, Lambda = NA_real_, Loss = Inf, Selected = FALSE,
+                         NTrain = NA_integer_, NValidation = NA_integer_, Status = "error",
+                         Message = conditionMessage(e), stringsAsFactors = FALSE)))
+}
+
+tag_tuning_trace <- function(trace, stage, cluster, iter = 0L) {
+  trace$Stage <- stage
+  trace$Cluster <- cluster
+  trace$Iter <- iter
+  trace
+}
+
+tune_initial_partition <- function(x, y, groups, alpha_grid, control, seed) {
+  G <- max(groups)
+  losses <- matrix(Inf, G, length(alpha_grid))
+  lambdas <- matrix(NA_real_, G, length(alpha_grid))
+  trace <- list()
+  for (g in seq_len(G)) for (a in seq_along(alpha_grid)) {
+    idx <- which(groups == g)
+    ans <- holdout_path(x[idx, , drop = FALSE], y[idx], alpha_grid[a], control,
+                        scmr_seed(seed, 8300 + G + 17 * g))
+    losses[g, a] <- ans$loss
+    lambdas[g, a] <- ans$lambda
+    trace[[length(trace) + 1L]] <- tag_tuning_trace(ans$trace, "initial", g)
+  }
+  # Every cluster must have a valid result for a candidate shared alpha.
+  score <- colMeans(losses)
+  if (!any(is.finite(score))) stop("Initial tuning failed for at least one cluster at every alpha.", call. = FALSE)
+  best <- which.min(score)
+  list(alpha = alpha_grid[best], lambda = lambdas[, best],
+       trace = do.call(rbind, trace))
+}
+
+tune_local_partition <- function(x, y, groups, alpha, lambda, control, seed, iter) {
+  trace <- list()
+  for (g in seq_along(lambda)) {
+    idx <- which(groups == g)
+    grid <- sort(unique(lambda[g] * c(1, control$local_lambda_factors)), decreasing = TRUE)
+    ans <- holdout_path(x[idx, , drop = FALSE], y[idx], alpha, control,
+                        scmr_seed(seed, 9100 + 1000 * length(lambda) + 17 * g + iter), grid)
+    old <- if (length(ans$losses)) ans$losses[which.min(abs(grid - lambda[g]))] else Inf
+    updated <- is.finite(ans$loss) && ans$loss < old - control$lambda_update_tol
+    tr <- tag_tuning_trace(ans$trace, "local_lambda", g, iter)
+    tr$LambdaBefore <- lambda[g]
+    if (updated) lambda[g] <- ans$lambda
+    tr$LambdaAfter <- lambda[g]
+    trace[[g]] <- tr
+  }
+  list(lambda = lambda, trace = do.call(rbind, trace))
+}
+
+tune_final_partition <- function(x, y, groups, alpha, lambda, control, seed) {
+  candidates <- sort(unique(c(alpha, pmin(pmax(alpha + control$final_alpha_delta, .05), 1))))
+  losses <- matrix(Inf, length(lambda), length(candidates))
+  selected <- matrix(NA_real_, length(lambda), length(candidates))
+  trace <- list()
+  for (g in seq_along(lambda)) for (a in seq_along(candidates)) {
+    idx <- which(groups == g)
+    grid <- sort(unique(lambda[g] * c(1, control$local_lambda_factors)), decreasing = TRUE)
+    ans <- holdout_path(x[idx, , drop = FALSE], y[idx], candidates[a], control,
+                        scmr_seed(seed, 12000 + 1000 * length(lambda) + 29 * g), grid)
+    losses[g, a] <- ans$loss
+    selected[g, a] <- ans$lambda
+    trace[[length(trace) + 1L]] <- tag_tuning_trace(ans$trace, "final_alpha", g)
+  }
+  score <- colMeans(losses)
+  old <- match(alpha, candidates)
+  changed <- FALSE
+  if (any(is.finite(score))) {
+    best <- which.min(score)
+    changed <- score[best] < score[old] - control$alpha_update_tol
+    if (changed) {
+      alpha <- candidates[best]
+      lambda <- selected[, best]
     }
   }
-  if (!is.finite(best$lambda) || !is.finite(best$alpha)) {
-    stop("Holdout alpha/lambda tuning failed.", call. = FALSE)
-  }
-  best$trace <- if (length(rows) > 0) do.call(rbind, rows) else data.frame()
-  best
+  list(alpha = alpha, lambda = lambda, changed = changed,
+       trace = do.call(rbind, trace))
 }
 
-local_lambda_update <- function(x, y, alpha, lambda_old, class_levels, control,
-                                seed = 123) {
-  y <- factor(y, levels = class_levels)
-  lambda_old <- as.numeric(lambda_old)[1]
-  if (!is.finite(lambda_old) || lambda_old <= 0) {
-    return(list(lambda = lambda_old, loss = Inf, action = "reuse_bad_old_lambda"))
-  }
-  lambda_grid <- sort(unique(as.numeric(lambda_old * control$local_lambda_factors)), decreasing = TRUE)
-  lambda_grid <- lambda_grid[is.finite(lambda_grid) & lambda_grid > 0]
-  split <- make_holdout_validation_split(y, val_prop = control$holdout_val_prop, seed = seed)
-  tr_idx <- split$train_idx
-  val_idx <- split$val_idx
-  fit <- tryCatch({
-    lambda_path <- sort(unique(as.numeric(c(lambda_grid * 10, lambda_grid, lambda_grid / 10))), decreasing = TRUE)
-    lambda_path <- lambda_path[is.finite(lambda_path) & lambda_path > 0]
-    glmnet::glmnet(
-      x = x[tr_idx, , drop = FALSE], y = factor(y[tr_idx], levels = class_levels),
-      family = "multinomial", alpha = alpha, lambda = lambda_path,
-      standardize = control$standardize, type.multinomial = control$type_multinomial,
-      maxit = 100000
-    )
-  }, error = function(e) e)
-  if (inherits(fit, "error")) return(list(lambda = lambda_old, loss = Inf, action = "reuse_after_fit_error"))
-  losses <- tryCatch(
-    path_logloss_by_lambda(fit, x[val_idx, , drop = FALSE], y[val_idx], lambda_grid, class_levels),
-    error = function(e) rep(Inf, length(lambda_grid))
-  )
-  sel <- select_lambda_1se_like(lambda_grid, losses, tol = control$lambda_1se_tol)
-  old_idx <- which.min(abs(log(lambda_grid) - log(lambda_old)))
-  old_loss <- losses[old_idx]
-  if (is.finite(sel$loss) && (!is.finite(old_loss) || sel$loss < old_loss - control$lambda_update_tol)) {
-    return(list(lambda = sel$lambda, loss = sel$loss, action = "update_lambda"))
-  }
-  list(lambda = lambda_old, loss = old_loss, action = "reuse_lambda")
-}
-
-final_tune_alpha_after_convergence <- function(x, y, row_group, alpha_current,
-                                               lambda_vec_current, class_levels,
-                                               control, seed = 123) {
-  G <- max(row_group)
-  alpha_candidates <- unique(pmin(pmax(alpha_current + control$final_alpha_delta, 0.05), 1.0))
-  alpha_candidates <- sort(alpha_candidates)
-  result <- list()
-  for (aa in alpha_candidates) {
-    lambda_vec <- numeric(G)
-    loss_vec <- rep(Inf, G)
-    for (g in seq_len(G)) {
-      idx_g <- which(row_group == g)
-      upd <- local_lambda_update(
-        x[idx_g, , drop = FALSE], y[idx_g], aa, lambda_vec_current[g],
-        class_levels, control, seed = seed + 29 * g
-      )
-      lambda_vec[g] <- upd$lambda
-      loss_vec[g] <- upd$loss
-    }
-    result[[as.character(aa)]] <- list(
-      alpha = aa, lambda_vec = lambda_vec, loss_vec = loss_vec,
-      agg_loss = mean(loss_vec[is.finite(loss_vec)], na.rm = TRUE)
-    )
-  }
-  agg <- vapply(result, function(z) z$agg_loss, numeric(1))
-  if (!any(is.finite(agg))) {
-    return(list(alpha = alpha_current, lambda_vec = lambda_vec_current, action = "reuse_after_alpha_tuning_failure"))
-  }
-  best <- result[[names(agg)[which.min(agg)]]]
-  current_loss <- if (as.character(alpha_current) %in% names(result)) result[[as.character(alpha_current)]]$agg_loss else Inf
-  if (is.finite(best$agg_loss) && (!is.finite(current_loss) || best$agg_loss < current_loss - control$alpha_update_tol)) {
-    return(list(alpha = best$alpha, lambda_vec = best$lambda_vec, action = "update_alpha_after_convergence"))
-  }
-  list(alpha = alpha_current, lambda_vec = lambda_vec_current, action = "reuse_alpha")
+bind_diagnostics <- function(rows) {
+  rows <- Filter(function(z) !is.null(z) && nrow(z) > 0, rows)
+  if (!length(rows)) return(data.frame())
+  cols <- unique(unlist(lapply(rows, names)))
+  rows <- lapply(rows, function(z) {
+    for (nm in setdiff(cols, names(z))) z[[nm]] <- NA
+    z[, cols, drop = FALSE]
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
 }

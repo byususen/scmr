@@ -1,135 +1,78 @@
-compute_criteria_from_row_loglik <- function(row_loglik_by_g, group_unit, unit_num,
-                                             unit_id, y, x_ncol, W,
-                                             active_per_group, G, lambda_used,
-                                             class_levels, unit_total, unit_class,
-                                             df_effective_group, alpha,
-                                             phi = 1,
-                                             criterion_balance_gamma = 1) {
-  k <- length(class_levels)
-  n_rows <- length(y)
-  n_units <- length(unique(unit_id))
-  group_unit <- as.integer(group_unit)
-  row_group <- group_unit[unit_num]
-
-  assigned_loglik <- row_loglik_by_g[cbind(seq_len(n_rows), row_group)]
-  logLik <- sum(assigned_loglik)
-  neg2_logLik <- -2 * logLik
-
-  Wsum <- summary(W)
-  if (G == 1) {
-    spatial_bonus <- 0.5 * sum(Wsum$x)
-  } else {
-    same_cluster <- group_unit[Wsum$i] == group_unit[Wsum$j]
-    spatial_bonus <- 0.5 * sum(Wsum$x[same_cluster])
-  }
-  objective_value <- logLik + phi * spatial_bonus
-
-  df_original_group <- rep(k * (x_ncol + 1), G)
-  df_original_total <- sum(df_original_group)
-  df_effective_group <- as.numeric(df_effective_group)
-  bad <- !is.finite(df_effective_group)
-  if (any(bad)) df_effective_group[bad] <- max(k - 1, 1) * (active_per_group[bad] + 1)
-  df_effective_total <- sum(df_effective_group)
-
-  cluster_logLik <- numeric(G)
-  cluster_neg2 <- numeric(G)
-  cluster_n_rows <- integer(G)
-  cluster_n_units <- integer(G)
-  cluster_components <- vector("list", G)
-
-  for (g in seq_len(G)) {
-    idx_g_rows <- which(row_group == g)
-    idx_g_units <- which(group_unit == g)
-    cluster_n_rows[g] <- length(idx_g_rows)
-    cluster_n_units[g] <- length(idx_g_units)
-    cluster_logLik[g] <- if (length(idx_g_rows) > 0) sum(row_loglik_by_g[idx_g_rows, g]) else 0
-    cluster_neg2[g] <- -2 * cluster_logLik[g]
-    cluster_components[[g]] <- data.frame(
-      Cluster = g,
-      NRowsCluster = cluster_n_rows[g],
-      NUnitsCluster = cluster_n_units[g],
-      ClusterLogLik = cluster_logLik[g],
-      ClusterNeg2LogLik = cluster_neg2[g],
-      DFOriginal_g = df_original_group[g],
-      DFEffective_g = df_effective_group[g],
-      ActivePredictors_g = active_per_group[g],
-      LambdaUsed_g = lambda_used[g],
-      stringsAsFactors = FALSE
-    )
-  }
-  cluster_components <- do.call(rbind, cluster_components)
-
-  n_c <- cluster_n_rows
-  m_c <- cluster_n_units
-  m_bar <- mean(m_c[m_c > 0], na.rm = TRUE)
-  if (!is.finite(m_bar) || is.na(m_bar)) m_bar <- 1
-
-  a_c <- (m_bar / pmax(m_c, 1)) ^ criterion_balance_gamma
-  a_c[!is.finite(a_c)] <- 1
-  row_scale <- n_rows / sum(a_c * n_c, na.rm = TRUE)
-  if (!is.finite(row_scale) || is.na(row_scale)) row_scale <- 1
-  w_c <- row_scale * a_c
-
-  cb_fit_c <- w_c * cluster_neg2
-  cb_fit <- sum(cb_fit_c, na.rm = TRUE)
-  cb_penalty_c <- log(pmax(m_c, 2)) * df_effective_group
-  cb_penalty <- sum(cb_penalty_c, na.rm = TRUE)
-
-  criterion_cb_bic <- cb_fit + cb_penalty
-  criterion_scr_bic <- neg2_logLik + log(max(n_rows, 2)) * df_original_total
-
-  cluster_components$CBuBIC_n_c <- n_c
-  cluster_components$CBuBIC_m_c <- m_c
-  cluster_components$CBuBIC_m_bar <- m_bar
-  cluster_components$CBuBIC_a_c <- a_c
-  cluster_components$CBuBIC_w_c <- w_c
-  cluster_components$CBuBIC_weighted_N_c <- w_c * n_c
-  cluster_components$CBuBIC_WeightedNeg2LogLik_c <- cb_fit_c
-  cluster_components$CBuBIC_UnitPenalty_c <- cb_penalty_c
-  cluster_components$CBuBIC_Component_c <- cb_fit_c + cb_penalty_c
-
-  list(
-    logLik = logLik,
-    neg2_logLik = neg2_logLik,
-    spatial_bonus = spatial_bonus,
-    objective_value = objective_value,
-    n_rows = n_rows,
-    n_units = n_units,
-    n_predictors = x_ncol,
-    df_original_total = df_original_total,
-    df_effective_total = df_effective_total,
-    active_predictors_total = sum(active_per_group),
-    CriterionSCR_BIC_original = criterion_scr_bic,
-    CBuBIC_Fit = cb_fit,
-    CBuBIC_Penalty = cb_penalty,
-    CBuBIC_m_bar = m_bar,
-    CBuBIC_WeightedN_Check = sum(w_c * n_c, na.rm = TRUE),
-    CriterionV3_CB_uBIC = criterion_cb_bic,
-    cluster_components = cluster_components
-  )
+# The Potts objective is reported separately from the IC likelihood.
+spatial_bonus <- function(w, groups) {
+  if (is.null(w)) return(0)
+  # General sparse storage exposes both triangles consistently.
+  entries <- Matrix::summary(methods::as(w, "generalMatrix"))
+  sum(entries$x[groups[entries$i] == groups[entries$j]]) / 2
 }
 
-compute_global_criteria <- function(fit_global, X_train, y_train, prob_train,
-                                    alpha, s_rule, class_levels,
-                                    standardize = TRUE) {
-  logLik_global <- sum(true_class_logp(prob_train, y_train, class_levels))
-  neg2_logLik_global <- -2 * logLik_global
-  df_original_global <- length(class_levels) * (ncol(X_train) + 1)
-  df_effective_global <- elastic_net_effective_df(
-    fit_global, X_train, s = s_rule, alpha = alpha,
-    class_levels = class_levels, standardize = standardize
-  )
-  list(
-    logLik = logLik_global,
-    neg2_logLik = neg2_logLik_global,
-    n_rows = nrow(X_train),
-    n_units = NA_real_,
-    n_predictors = ncol(X_train),
-    active_predictors_total = NA_real_,
-    df_original_total = df_original_global,
-    df_effective_total = df_effective_global,
-    CriterionSCR_BIC_original = neg2_logLik_global + log(max(nrow(X_train), 2)) * df_original_global,
-    CriterionV3_CB_uBIC = neg2_logLik_global + log(max(nrow(X_train), 2)) * df_effective_global,
-    lambda_used = get_s_value(fit_global, s_rule)
-  )
+scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
+                              w = NULL, group_unit = NULL) {
+  g_total <- length(fits)
+  n <- nrow(x)
+  assigned <- numeric(n)
+  parts <- vector("list", g_total)
+  for (g in seq_len(g_total)) {
+    idx <- which(row_group == g)
+    if (!length(idx)) stop("Cannot evaluate an empty cluster.", call. = FALSE)
+    lp <- true_class_logp(engine_predict(fits[[g]], x[idx, , drop = FALSE]),
+                         y[idx], fits[[g]]$classes)
+    assigned[idx] <- lp
+    edf <- engine_effective_df(fits[[g]], x[idx, , drop = FALSE], control$selection_tol)
+    parts[[g]] <- data.frame(
+      Cluster = g, NRowsCluster = length(idx), NUnitsCluster = length(unique(unit_id[idx])),
+      ClusterLogLik = sum(lp), ClusterNeg2LogLik = -2 * sum(lp),
+      DFOriginal_g = edf$nominal, DFEffective_g = edf$df,
+      DFNominalActive_g = edf$df_nominal_active,
+      ActivePredictors_g = edf$active_predictors,
+      ActiveCoefficients_g = edf$active_coefficients,
+      LambdaUsed_g = fits[[g]]$lambda, EDFMethod = edf$method,
+      stringsAsFactors = FALSE)
+  }
+  parts <- do.call(rbind, parts)
+  m <- parts$NUnitsCluster
+  a <- (mean(m) / m)^control$criterion_balance_gamma
+  weight <- a * n / sum(a * parts$NRowsCluster)
+  parts$CBBIC_n_c <- parts$NRowsCluster
+  parts$CBBIC_m_c <- m
+  parts$CBBIC_m_bar <- mean(m)
+  parts$CBBIC_a_c <- a
+  parts$CBBIC_w_c <- weight
+  parts$CBBIC_weighted_N_c <- weight * parts$NRowsCluster
+  parts$CBBIC_WeightedNeg2LogLik_c <- weight * parts$ClusterNeg2LogLik
+  parts$CBBIC_UnitPenalty_c <- log(pmax(m, 2)) * parts$DFEffective_g
+  parts$CBBIC_Component_c <- parts$CBBIC_WeightedNeg2LogLik_c + parts$CBBIC_UnitPenalty_c
+  parts$CBAIC_UnitPenalty_c <- 2 * parts$DFEffective_g
+  parts$CBAIC_Component_c <- parts$CBBIC_WeightedNeg2LogLik_c + parts$CBAIC_UnitPenalty_c
+  ll <- sum(assigned)
+  df_orig <- sum(parts$DFOriginal_g)
+  df_eff <- sum(parts$DFEffective_g)
+  cb_fit <- sum(parts$CBBIC_WeightedNeg2LogLik_c)
+  cb_pen <- sum(parts$CBBIC_UnitPenalty_c)
+  bonus <- spatial_bonus(w, group_unit)
+  criteria <- list(
+    logLik = ll, neg2_logLik = -2 * ll, spatial_bonus = bonus,
+    objective_value = ll + control$phi * bonus,
+    neg2_objective = -2 * (ll + control$phi * bonus),
+    n_rows = n, n_units = length(unique(unit_id)), n_predictors = ncol(x),
+    df_original_total = df_orig, df_effective_total = df_eff,
+    df_nominal_active_total = sum(parts$DFNominalActive_g),
+    edf_method = unique(parts$EDFMethod),
+    edf_is_approximation = any(vapply(fits, function(z) z$kind == "glmnet", logical(1))),
+    active_predictors_total = sum(parts$ActivePredictors_g),
+    penalty_scr_bic_original = log(n) * df_orig,
+    penalty_scr_bic_effective = log(n) * df_eff,
+    penalty_scr_aic_effective = 2 * df_eff,
+    CriterionSCR_BIC_original = -2 * ll + log(n) * df_orig,
+    CriterionSCR_BIC_effective = -2 * ll + log(n) * df_eff,
+    CriterionSCR_AIC_effective = -2 * ll + 2 * df_eff,
+    CBBIC_Fit = cb_fit, CBBIC_Penalty = cb_pen,
+    CBBIC_WeightedN_Check = sum(parts$CBBIC_weighted_N_c),
+    CBBIC_m_bar = mean(m), CBBIC_EmptyClusterCount = 0L,
+    CBBIC_InfeasibleClusterCount = 0L, CBBIC_FeasibilityPenalty = 0,
+    CriterionCB_BIC = cb_fit + cb_pen,
+    CriterionCB_AIC = cb_fit + 2 * df_eff,
+    cluster_components = parts)
+  criteria$CriterionV3_CB_uBIC <- criteria$CriterionCB_BIC
+  criteria
 }

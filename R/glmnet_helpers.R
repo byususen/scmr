@@ -1,10 +1,13 @@
 make_stratified_foldid <- function(y, nfolds = 5, seed = 123) {
-  set.seed(seed)
+  if (!is.null(seed)) set.seed(seed)
   y <- factor(y)
   tab <- table(y)
   tab <- tab[tab > 0]
   if (length(tab) < 2) stop("Need at least two classes for cv.glmnet().", call. = FALSE)
-  nfolds_use <- max(2, min(as.integer(nfolds), min(tab)))
+  nfolds_use <- min(as.integer(nfolds), min(tab))
+  if (!is.finite(nfolds_use) || nfolds_use < 3L) {
+    stop("Cross-validation needs at least three folds and three observations per class.", call. = FALSE)
+  }
   foldid <- integer(length(y))
   for (cl in levels(y)) {
     idx <- which(y == cl)
@@ -39,10 +42,10 @@ predict_multinom_prob <- function(fit, newx, s = NULL) {
   } else {
     get_s_value(fit, s)
   }
-  arr <- stats::predict(fit, newx = newx, s = s_use, type = "response")
+  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "response")
   if (length(dim(arr)) == 3) {
-    prob <- arr[, , 1, drop = FALSE]
-    prob <- prob[, , 1]
+    prob <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
+                   ncol = dim(arr)[2], dimnames = dimnames(arr)[1:2])
   } else {
     prob <- arr
   }
@@ -64,26 +67,34 @@ extract_cv_preval_prob_matrix <- function(cvfit, y_levels, s_rule, n_test) {
     out <- do.call(cbind, lapply(preval, function(mat) as.matrix(mat)[, idx]))
     if (!is.null(names(preval))) colnames(out) <- names(preval)
   } else if (length(dim(preval)) == 3) {
-    out <- preval[, , idx, drop = FALSE]
-    out <- out[, , 1]
+    out <- matrix(preval[, , idx, drop = FALSE], nrow = dim(preval)[1],
+                  ncol = dim(preval)[2], dimnames = dimnames(preval)[1:2])
   } else {
     stop("Unsupported fit.preval structure.", call. = FALSE)
   }
-  normalize_prob_matrix(out, y_levels = y_levels, n_test = n_test)
+  # cv.glmnet keeps prevalidated linear predictors for multinomial models.
+  normalize_prob_matrix(softmax_rows(out), y_levels = y_levels, n_test = n_test)
+}
+
+glmnet_design <- function(x) {
+  if (ncol(x) == 1L) cbind(x, `.scmr_padding` = 0) else x
 }
 
 fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
                                     standardize = TRUE,
-                                    type_multinomial = "grouped") {
+                                    type_multinomial = "grouped", maxit = 100000) {
   y <- factor(y, levels = class_levels)
   lambda <- as.numeric(lambda)[1]
   if (!is.finite(lambda) || lambda <= 0) stop("lambda must be positive.", call. = FALSE)
   lambda_path <- sort(unique(as.numeric(c(lambda * 100, lambda * 10, lambda, lambda / 10))), decreasing = TRUE)
   lambda_path <- lambda_path[is.finite(lambda_path) & lambda_path > 0]
   fit <- glmnet::glmnet(
-    x = x, y = y, family = "multinomial", alpha = alpha, lambda = lambda_path,
-    standardize = standardize, type.multinomial = type_multinomial, maxit = 100000
+    x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = lambda_path,
+    standardize = standardize, type.multinomial = type_multinomial, maxit = maxit
   )
+  if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
+    stop("The glmnet path did not reach the requested lambda; inspect solver limits.", call. = FALSE)
+  }
   fit$fixed_lambda <- lambda
   fit$selected_lambda <- lambda
   fit
@@ -102,41 +113,4 @@ active_predictor_count <- function(fit, s = NULL, tol = 1e-8) {
     }
   }
   length(setdiff(active, "(Intercept)"))
-}
-
-elastic_net_effective_df <- function(fit, x_sub, s = NULL, alpha, class_levels,
-                                     standardize = TRUE, tol = 1e-8) {
-  n_g <- nrow(x_sub)
-  p_g <- ncol(x_sub)
-  x_names <- colnames(x_sub)
-  k_eff <- max(length(class_levels) - 1, 1)
-  if (n_g <= 1 || p_g == 0) return(k_eff)
-  s_use <- if (is.null(s)) get_s_value(fit, NULL) else s
-  cf <- stats::coef(fit, s = s_use)
-  active <- character(0)
-  if (is.list(cf)) {
-    for (mat in cf) {
-      mat <- as.matrix(mat)
-      vals <- as.numeric(mat[, 1])
-      names(vals) <- rownames(mat)
-      active <- union(active, names(vals)[abs(vals) > tol])
-    }
-  }
-  active <- intersect(setdiff(active, "(Intercept)"), x_names)
-  if (length(active) == 0) return(k_eff)
-  x_a <- as.matrix(x_sub[, active, drop = FALSE])
-  if (isTRUE(standardize)) {
-    x_a <- scale(x_a)
-    x_a[!is.finite(x_a)] <- 0
-  }
-  lambda_used <- get_s_value(fit, s_use)
-  lambda2 <- n_g * lambda_used * (1 - alpha)
-  xtx <- crossprod(x_a)
-  p_a <- ncol(x_a)
-  ridge_mat <- xtx + lambda2 * diag(p_a)
-  trace_val <- tryCatch(sum(diag(solve(ridge_mat, xtx))), error = function(e) sum(diag(MASS::ginv(ridge_mat) %*% xtx)))
-  trace_val <- as.numeric(trace_val)
-  if (!is.finite(trace_val)) trace_val <- length(active)
-  trace_val <- max(0, min(trace_val, length(active)))
-  k_eff * (1 + trace_val)
 }
