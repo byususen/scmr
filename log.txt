@@ -1,0 +1,78 @@
+Options:
+List of 14
+ $ reps      : int 10
+ $ n_units   : int 150
+ $ n_time    : int 12
+ $ patterns  : chr "irregular,blocks"
+ $ G         : int 3
+ $ delta     : num 1
+ $ out       : chr "/home/runner/work/_temp/pilot_out"
+ $ cores     : int 4
+ $ theory    : logi FALSE
+ $ G_grid    : chr "1,2,3,4,5"
+ $ p_active  : int 5
+ $ p_inactive: int 10
+ $ coef_k    : int 10
+ $ n_starts  : int 6
+
+Elapsed: 4.192014 mins 
+
+== Mean metrics at new locations ==
+     Pattern          Model         Mode Kappa LogLoss TrainARI
+1     blocks       DSCMR-EN       filter 0.399   1.248   0.9956
+2  irregular       DSCMR-EN       filter 0.365   1.317   0.7837
+3     blocks  DSCMR-EN-phi1       filter 0.400   1.252   0.9934
+4  irregular  DSCMR-EN-phi1       filter 0.349   1.360   0.6399
+5     blocks      Global-EN       filter 0.242   1.536       NA
+6  irregular      Global-EN       filter 0.258   1.515       NA
+7     blocks          GW-EN       filter 0.352   1.334       NA
+8  irregular          GW-EN       filter 0.255   1.506       NA
+9     blocks        TCMR-EN       filter 0.413   1.216       NA
+10 irregular        TCMR-EN       filter 0.417   1.215       NA
+11    blocks    TwoStage-EN       filter 0.344   1.341   0.7526
+12 irregular    TwoStage-EN       filter 0.231   1.556   0.0453
+13    blocks       DSCMR-EN lag_observed 0.687   0.675   0.9956
+14 irregular       DSCMR-EN lag_observed 0.642   0.759   0.7837
+15    blocks  DSCMR-EN-phi1 lag_observed 0.687   0.678   0.9934
+16 irregular  DSCMR-EN-phi1 lag_observed 0.618   0.797   0.6399
+17    blocks      Global-EN lag_observed 0.536   0.958       NA
+18 irregular      Global-EN lag_observed 0.541   0.934       NA
+19    blocks          GW-EN lag_observed 0.631   0.770       NA
+20 irregular          GW-EN lag_observed 0.548   0.935       NA
+21    blocks SCMR-EN-static lag_observed 0.286   1.441   0.9904
+22 irregular SCMR-EN-static lag_observed 0.252   1.510   0.6345
+23    blocks        TCMR-EN lag_observed 0.707   0.642       NA
+24 irregular        TCMR-EN lag_observed 0.684   0.652       NA
+25    blocks    TwoStage-EN lag_observed 0.636   0.764   0.7526
+26 irregular    TwoStage-EN lag_observed 0.532   0.979   0.0453
+27    blocks       DSCMR-EN       plugin 0.329   2.016   0.9956
+28 irregular       DSCMR-EN       plugin 0.292   2.012   0.7837
+29    blocks  DSCMR-EN-phi1       plugin 0.327   2.036   0.9934
+30 irregular  DSCMR-EN-phi1       plugin 0.273   2.072   0.6399
+31    blocks      Global-EN       plugin 0.159   2.204       NA
+32 irregular      Global-EN       plugin 0.162   2.177       NA
+33    blocks          GW-EN       plugin 0.285   2.087       NA
+34 irregular          GW-EN       plugin 0.162   2.252       NA
+35    blocks        TCMR-EN       plugin 0.349   1.988       NA
+36 irregular        TCMR-EN       plugin 0.336   1.942       NA
+37    blocks    TwoStage-EN       plugin 0.261   2.137   0.7526
+38 irregular    TwoStage-EN       plugin 0.153   2.345   0.0453
+
+== Selected G ==
+PLIC_AIC 
+           
+             3
+  blocks    10
+  irregular 10
+PLIC_BIC 
+           
+            1 2 3
+  blocks    5 3 2
+  irregular 7 2 1
+SCR_AIC_eff 
+           
+             3
+  blocks    10
+  irregular 10
+
+DSCMR-EN monotone in every dataset: TRUE 
