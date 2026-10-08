@@ -1,1 +1,1 @@
-reps=3 n_units=150 n_time=24 patterns=irregular,blocks,global cores=4
+reps=10 n_units=150 n_time=24 patterns=irregular,blocks,global,smooth cores=4
