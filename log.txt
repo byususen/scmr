@@ -1,0 +1,101 @@
+scmr 0.5.0 | profile ci | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 7670 | units: 324 | segments: 36 | satellite predictors: 8 | rows with previous phase: 7254 
+     Regency
+Phase 3205 3212 6171
+    1  474  398  588
+    2  329  563  436
+    3  351  535  445
+    4  328  420  292
+    5  333  339  418
+    6  743  298  380
+
+==== E2_mapping | fold 1 | train rows 5642 | test rows 1703 ====
+  Global-EN alpha 0.9 lambda 0.00211 
+  Global-EN       G=1 | lag_observed kappa 0.5045 | 0.0 min
+  DSCMR-EN        G=2 | lag_observed kappa 0.6054 | 0.0 min
+  TwoStage-EN     G=2 | lag_observed kappa 0.6054 | 0.0 min
+  DSCMR-EN-phi1   G=2 | lag_observed kappa 0.6054 | 0.0 min
+  SCMR-EN-static  G=2 | direct kappa 0.2106 | 0.0 min
+   GW-EN G = 0 FAILED: Probabilities must be finite, nonnegative numbers. 
+  LightGBM        G=0 | lag_observed kappa 0.4653 | 0.1 min
+
+==== E1_nowcast | fold 1 | train rows 5361 | test rows 1893 ====
+  Global-EN alpha 0.9 lambda 0.00206 
+  Global-EN       G=1 | lag_observed kappa 0.5251 | 0.0 min
+  DSCMR-EN        G=2 | lag_observed kappa 0.6037 | 0.0 min
+  TwoStage-EN     G=2 | lag_observed kappa 0.6037 | 0.0 min
+  LightGBM        G=0 | lag_observed kappa 0.4695 | 0.1 min
+
+==== E3_imputation | fold 1 | train rows 5287 | test rows 7670 ====
+  Global-EN alpha 0.9 lambda 0.0025 
+  Global-EN       G=1 | impute kappa 0.6497 | 0.0 min
+  DSCMR-EN        G=2 | impute kappa 0.7386 | 0.0 min
+
+==== REPORTS ====
+        Design          Model G         Mode TestKappa TestAccuracy TestMacroF1
+    E1_nowcast       DSCMR-EN 2 lag_observed     0.604        0.671       0.668
+    E1_nowcast    TwoStage-EN 2 lag_observed     0.604        0.671       0.668
+    E1_nowcast      Global-EN 1 lag_observed     0.525        0.606       0.600
+    E1_nowcast       LightGBM 0 lag_observed     0.469        0.560       0.552
+    E2_mapping SCMR-EN-static 2       direct     0.211        0.346       0.334
+    E2_mapping       DSCMR-EN 2       filter     0.292        0.412       0.407
+    E2_mapping  DSCMR-EN-phi1 2       filter     0.292        0.412       0.407
+    E2_mapping    TwoStage-EN 2       filter     0.292        0.412       0.407
+    E2_mapping      Global-EN 1       filter     0.187        0.328       0.307
+    E2_mapping       LightGBM 0       filter     0.143        0.291       0.275
+    E2_mapping       DSCMR-EN 2 lag_observed     0.605        0.672       0.671
+    E2_mapping  DSCMR-EN-phi1 2 lag_observed     0.605        0.672       0.671
+    E2_mapping    TwoStage-EN 2 lag_observed     0.605        0.672       0.671
+    E2_mapping      Global-EN 1 lag_observed     0.505        0.589       0.583
+    E2_mapping       LightGBM 0 lag_observed     0.465        0.557       0.550
+    E2_mapping       DSCMR-EN 2       plugin     0.235        0.366       0.362
+    E2_mapping  DSCMR-EN-phi1 2       plugin     0.235        0.366       0.362
+    E2_mapping    TwoStage-EN 2       plugin     0.235        0.366       0.362
+    E2_mapping      Global-EN 1       plugin     0.120        0.271       0.256
+    E2_mapping       LightGBM 0       plugin     0.120        0.272       0.258
+ E3_imputation       DSCMR-EN 2       impute     0.739        0.783       0.781
+ E3_imputation      Global-EN 1       impute     0.650        0.710       0.702
+ E3_imputation   CarryForward 0       impute     0.263        0.388       0.379
+ TestLogLoss
+       0.817
+       0.817
+       1.002
+       1.346
+       1.518
+       1.388
+       1.388
+       1.388
+       1.611
+       1.960
+       0.823
+       0.823
+       0.823
+       1.039
+       1.419
+       2.249
+       2.248
+       2.248
+       2.409
+       3.961
+       0.567
+       0.742
+       3.497
+
+Selected G (DSCMR-EN grid, Global-EN as G = 1):
+  CriterionPLIC_AIC            E1_nowcast 1 lag_observed      G = 2
+  CriterionPLIC_AIC            E2_mapping 1 lag_observed      G = 2
+  CriterionPLIC_AIC            E2_mapping 1 filter            G = 2
+  CriterionPLIC_AIC            E3_imputation 1 impute         G = 2
+  CriterionPLIC_BIC            E1_nowcast 1 lag_observed      G = 2
+  CriterionPLIC_BIC            E2_mapping 1 lag_observed      G = 2
+  CriterionPLIC_BIC            E2_mapping 1 filter            G = 2
+  CriterionPLIC_BIC            E3_imputation 1 impute         G = 2
+  CriterionSCR_AIC_effective   E1_nowcast 1 lag_observed      G = 2
+  CriterionSCR_AIC_effective   E2_mapping 1 lag_observed      G = 2
+  CriterionSCR_AIC_effective   E2_mapping 1 filter            G = 2
+  CriterionSCR_AIC_effective   E3_imputation 1 impute         G = 2
+
+==== DONE ====
+Outputs in: /home/runner/work/_temp/emp_out | failed runs: 1 
