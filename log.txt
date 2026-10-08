@@ -1,0 +1,92 @@
+scmr 0.5.0 | profile pilot | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 36529 | units: 1620 | segments: 180 | satellite predictors: 32 | rows with previous phase: 32847 
+     Regency
+Phase 3205 3212 6171
+    1 2206 1789 2688
+    2 1545 2600 1988
+    3 1733 2452 1991
+    4 1411 2161 1527
+    5 1597 1757 2264
+    6 3649 1434 1737
+
+==== E2_mapping | fold 1 | train rows 26311 | test rows 7290 ====
+  Global-EN alpha 0.9 lambda 0.00132 
+  Global-EN       G=1 | lag_observed kappa 0.5047 | 0.0 min
+  DSCMR-EN        G=3 | lag_observed kappa 0.7121 | 0.4 min
+  TwoStage-EN     G=3 | lag_observed kappa 0.7121 | 0.0 min
+  DSCMR-EN        G=6 | lag_observed kappa 0.7041 | 0.5 min
+  TwoStage-EN     G=6 | lag_observed kappa 0.7061 | 0.1 min
+  DSCMR-EN-phi1   G=3 | lag_observed kappa 0.7121 | 0.3 min
+  SCMR-EN-static  G=3 | direct kappa 0.3042 | 0.4 min
+  DSCMR-EN-phi1   G=6 | lag_observed kappa 0.7044 | 0.4 min
+  SCMR-EN-static  G=6 | direct kappa 0.2947 | 0.5 min
+  LightGBM        G=0 | lag_observed kappa 0.4835 | 0.2 min
+
+==== REPORTS ====
+     Design          Model G         Mode TestKappa TestAccuracy TestMacroF1
+ E2_mapping SCMR-EN-static 3       direct     0.304        0.423       0.414
+ E2_mapping SCMR-EN-static 6       direct     0.295        0.415       0.407
+ E2_mapping  DSCMR-EN-phi1 3       filter     0.421        0.520       0.515
+ E2_mapping    TwoStage-EN 3       filter     0.421        0.520       0.515
+ E2_mapping       DSCMR-EN 3       filter     0.421        0.519       0.515
+ E2_mapping       DSCMR-EN 6       filter     0.416        0.515       0.511
+ E2_mapping  DSCMR-EN-phi1 6       filter     0.416        0.515       0.511
+ E2_mapping    TwoStage-EN 6       filter     0.416        0.515       0.511
+ E2_mapping      Global-EN 1       filter     0.198        0.338       0.318
+ E2_mapping       LightGBM 0       filter     0.177        0.320       0.304
+ E2_mapping       DSCMR-EN 3 lag_observed     0.712        0.761       0.759
+ E2_mapping  DSCMR-EN-phi1 3 lag_observed     0.712        0.761       0.759
+ E2_mapping    TwoStage-EN 3 lag_observed     0.712        0.761       0.759
+ E2_mapping    TwoStage-EN 6 lag_observed     0.706        0.756       0.754
+ E2_mapping  DSCMR-EN-phi1 6 lag_observed     0.704        0.755       0.752
+ E2_mapping       DSCMR-EN 6 lag_observed     0.704        0.754       0.752
+ E2_mapping      Global-EN 1 lag_observed     0.505        0.589       0.582
+ E2_mapping       LightGBM 0 lag_observed     0.483        0.571       0.565
+ E2_mapping  DSCMR-EN-phi1 3       plugin     0.301        0.424       0.412
+ E2_mapping    TwoStage-EN 3       plugin     0.301        0.424       0.412
+ E2_mapping       DSCMR-EN 3       plugin     0.301        0.424       0.412
+ E2_mapping       DSCMR-EN 6       plugin     0.299        0.422       0.413
+ E2_mapping    TwoStage-EN 6       plugin     0.298        0.422       0.411
+ E2_mapping  DSCMR-EN-phi1 6       plugin     0.297        0.421       0.411
+ E2_mapping       LightGBM 0       plugin     0.111        0.268       0.248
+ E2_mapping      Global-EN 1       plugin     0.108        0.267       0.238
+ TestLogLoss
+       1.401
+       1.414
+       1.174
+       1.174
+       1.173
+       1.183
+       1.183
+       1.180
+       1.595
+       1.653
+       0.600
+       0.600
+       0.600
+       0.607
+       0.611
+       0.611
+       1.002
+       1.036
+       2.260
+       2.260
+       2.266
+       2.328
+       2.310
+       2.318
+       2.963
+       2.404
+
+Selected G (DSCMR-EN grid, Global-EN as G = 1):
+  CriterionPLIC_AIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_AIC            E2_mapping 1 filter            G = 3
+  CriterionPLIC_BIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_BIC            E2_mapping 1 filter            G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 lag_observed      G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 filter            G = 3
+
+==== DONE ====
+Outputs in: /home/runner/work/_temp/emp_out | failed runs: 0 
