@@ -9,7 +9,14 @@ article_config <- function(profile = c("smoke", "pilot", "main"), output_dir = "
     class_levels = c("C1", "C2", "C3"), G = 1:10, nfolds = 5L, seed = 1000L,
     fit_control = fit, dgp_control = scmr::scmr_simulation_control(),
     resume = TRUE, save_fits = FALSE, export_per_observation = FALSE,
-    export_membership = FALSE, require_convergence = TRUE)
+    export_membership = FALSE, require_convergence = TRUE,
+    # Optional extra models: "TwoStage-EN" (k-means partition, no membership
+    # updates) and "SCMR-EN-MS" (monotone sum-scale algorithm with multi-start
+    # coefficient-space initialization). Both are evaluated over the full G grid.
+    extra_models = character(), ms_control = list(lambda_scale = "sum", n_starts = 3L,
+      tiny_movement_max_units = 0, tiny_movement_rate_tol = 0, tiny_movement_revert = FALSE,
+      max_iter = 30L, lambda_1se_tol = 0, coef_init_k = 80L, coef_init_anchors = 2000L,
+      coef_init_alpha = 0.1, coef_init_lambda = 0.0625))
   if (profile == "pilot") {
     cfg$n_obs <- 600L; cfg$n_new <- 60L; cfg$n_repeats <- 2L; cfg$G <- c(1L, 3L, 6L)
   }
@@ -31,7 +38,9 @@ article_config <- function(profile = c("smoke", "pilot", "main"), output_dir = "
   for (nm in c("n_obs", "n_new", "n_repeats", "n_active", "n_inactive", "G", "seed")) {
     if (any(!is.finite(cfg[[nm]])) || any(cfg[[nm]] != floor(cfg[[nm]]))) stop(nm, " must contain integers.")
   }
-  if (any(!cfg$scenarios %in% c("global", "clustered_balanced", "clustered_imbalanced", "smooth")) ||
+  if (any(!cfg$scenarios %in% c("global", "clustered_balanced", "clustered_imbalanced", "smooth",
+                                 "clustered_irregular")) ||
+      any(!cfg$extra_models %in% c("TwoStage-EN", "SCMR-EN-MS")) ||
       any(!cfg$class_balance %in% c("balanced", "imbalanced"))) stop("Unknown scenario or class balance.")
   if (anyDuplicated(cfg$G)) stop("G must contain distinct candidates.")
   cfg$fit_control <- do.call(scmr::scmr_control, cfg$fit_control)
@@ -47,11 +56,12 @@ article_grid <- function(cfg) {
   grid$Heterogeneity[!grepl("^clustered", grid$Scenario)] <- 1
   grid <- unique(grid)
   grid$P <- grid$NActive + grid$NInactive
-  grid$Seed <- with(grid, cfg$seed + Repeat * 1000000 + round(Eta * 1000) + P * 100 +
-    NActive * 10000 + round(Heterogeneity * 100000) +
-    ifelse(Scenario == "smooth", 5000000, ifelse(Scenario == "clustered_balanced", 7000000,
-    ifelse(Scenario == "clustered_imbalanced", 9000000, 0))) +
-    ifelse(ClassBalance == "imbalanced", 13000000, 0))
+  # Seed = cfg$seed + a hash of every setting that defines the dataset. The old
+  # additive formula (Repeat * 1e6 + scenario offset) collided once there were
+  # more than two repeats (e.g. smooth repeat 3 = clustered_balanced repeat 1).
+  keys <- with(grid, paste(Repeat, Scenario, Eta, ClassBalance, NActive, NInactive, Heterogeneity, sep = "|"))
+  hashes <- vapply(keys, function(k) article_hash(k), character(1), USE.NAMES = FALSE)
+  grid$Seed <- cfg$seed + strtoi(substr(hashes, 1L, 7L), 16L)
   if (any(grid$Seed > .Machine$integer.max - 10000)) stop("Study seed grid exceeds R's seed range.")
   # Detect, rather than silently permit, collisions in the source script's seed formula.
   if (anyDuplicated(grid$Seed)) stop("Study settings produce duplicate seeds; use separate configurations.")
@@ -59,15 +69,41 @@ article_grid <- function(cfg) {
   grid
 }
 
+article_true_G <- function(scenario) {
+  switch(scenario, global = 1L, clustered_balanced = 6L, clustered_imbalanced = 6L,
+         clustered_irregular = 3L, smooth = NA_integer_)
+}
+
 article_models <- function(scenario, cfg) {
   models <- data.frame(Model = c("Global", "Global-EN", rep("SCMR-EN", length(cfg$G))),
     Mode = c("global", "global", rep("scmr", length(cfg$G))),
     Penalty = c("none", "elastic_net", rep("elastic_net", length(cfg$G))),
     G = c(1L, 1L, cfg$G), stringsAsFactors = FALSE)
+  true_G <- article_true_G(scenario)
   if (scenario != "smooth") models <- rbind(models,
-    data.frame(Model = "SCMR", Mode = "scmr", Penalty = "none", G = if (scenario == "global") 1L else 6L))
+    data.frame(Model = "SCMR", Mode = "scmr", Penalty = "none", G = true_G))
   if (grepl("^clustered", scenario)) models <- rbind(models,
     data.frame(Model = c("TCMR", "TCMR-EN"), Mode = "fixed_clusters",
-      Penalty = c("none", "elastic_net"), G = 6L))
+      Penalty = c("none", "elastic_net"), G = true_G))
+  for (extra in cfg$extra_models) {
+    g_extra <- setdiff(cfg$G, 1L)
+    if (length(g_extra)) models <- rbind(models,
+      data.frame(Model = extra, Mode = "scmr", Penalty = "elastic_net", G = g_extra))
+  }
   models
+}
+
+# Fitting controls for each study model; extra models modify the article control.
+article_run_control <- function(cfg, model) {
+  ctrl <- cfg$fit_control
+  # TwoStage-EN shares the penalty settings of SCMR-EN-MS, so the two differ only
+  # in whether memberships are updated (and in the extra starts).
+  if (model %in% c("TwoStage-EN", "SCMR-EN-MS")) ctrl[names(cfg$ms_control)] <- cfg$ms_control
+  if (identical(model, "TwoStage-EN")) {
+    ctrl$update_memberships <- FALSE
+    ctrl$n_starts <- 1L
+    ctrl$init_method <- "kmeans"
+    ctrl$start_methods <- NULL
+  }
+  do.call(scmr::scmr_control, ctrl)
 }

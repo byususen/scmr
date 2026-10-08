@@ -1,6 +1,6 @@
 Package: scmr
 Title: Spatially Clustered Multinomial Regression
-Version: 0.3.0
+Version: 0.4.0.9000
 Authors@R: c(
     person("Bayu", "Suseno", role = c("aut", "cre"), email = "byususen@users.noreply.github.com"),
     person("SCMR study contributors", role = "ctb")
