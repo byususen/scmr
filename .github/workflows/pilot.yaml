@@ -42,3 +42,38 @@ jobs:
           git add -A
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Pilot ${GITHUB_RUN_ID}"
           git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/pilot-${GITHUB_REF_NAME#pilot/}
+
+  empirical-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: local::., any::lightgbm
+          needs: check
+      - name: Run empirical v3 on synthetic KSA-shaped data
+        run: |
+          out="$RUNNER_TEMP/emp_out"
+          mkdir -p "$out"
+          Rscript inst/empirical/make_fake_ksa.R "$RUNNER_TEMP/fake.csv"
+          SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE=ci \
+            Rscript inst/empirical/SCMR_EN_empirical_article_v3.R 2>&1 | tee "$out/log.txt"
+      - name: Publish results to branch ci-logs/empirical-<tag>
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/emp_out"
+          rm -rf runs
+          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID}" > RUN.txt
+          git init -q
+          git checkout -q -b logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Empirical smoke ${GITHUB_RUN_ID}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/empirical-${GITHUB_REF_NAME#pilot/}
