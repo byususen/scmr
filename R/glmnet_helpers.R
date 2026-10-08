@@ -90,16 +90,27 @@ fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
   y <- factor(y, levels = class_levels)
   lambda <- as.numeric(lambda)[1]
   if (!is.finite(lambda) || lambda <= 0) stop("lambda must be positive.", call. = FALSE)
-  lambda_path <- sort(unique(as.numeric(c(lambda * 100, lambda * 10, lambda, lambda / 10))), decreasing = TRUE)
-  lambda_path <- lambda_path[is.finite(lambda_path) & lambda_path > 0]
-  fit <- glmnet::glmnet(
-    x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = lambda_path,
-    standardize = standardize, type.multinomial = type_multinomial, maxit = maxit,
-    weights = weights %||% rep(1, nrow(x))
-  )
-  if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
-    stop("The glmnet path did not reach the requested lambda; inspect solver limits.", call. = FALSE)
+  # A decreasing warm-start path that ends exactly at the requested lambda.
+  # Nearly separable local data (strong lag-state predictors, tiny lambda) can
+  # stop glmnet before the end of a short path, or make it fail while naming a
+  # truncated path; a longer path with more warm starts is tried next.
+  attempt <- function(n_steps, top) {
+    path <- sort(unique(c(exp(seq(log(lambda * top), log(lambda), length.out = n_steps)), lambda)),
+                 decreasing = TRUE)
+    fit <- tryCatch(glmnet::glmnet(
+      x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = path,
+      standardize = standardize, type.multinomial = type_multinomial, maxit = maxit,
+      weights = weights %||% rep(1, nrow(x))), error = function(e) e)
+    if (inherits(fit, "error")) return(fit)
+    if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
+      return(simpleError("The glmnet path did not reach the requested lambda; inspect solver limits."))
+    }
+    fit
   }
+  fit <- attempt(4L, 100)
+  if (inherits(fit, "error")) fit <- attempt(25L, 1000)
+  if (inherits(fit, "error")) fit <- attempt(60L, 1e4)
+  if (inherits(fit, "error")) stop(conditionMessage(fit), call. = FALSE)
   fit$fixed_lambda <- lambda
   fit$selected_lambda <- lambda
   fit

@@ -51,6 +51,10 @@ profiles <- list(
 if (!run_profile %in% names(profiles)) stop("Unknown profile: ", run_profile)
 prof <- profiles[[run_profile]]
 if (nzchar(Sys.getenv("SCMR_FOLDS"))) prof$folds <- as.integer(strsplit(Sys.getenv("SCMR_FOLDS"), ",")[[1]])
+if (nzchar(Sys.getenv("SCMR_G_GRID"))) {
+  prof$G_grid <- as.integer(strsplit(Sys.getenv("SCMR_G_GRID"), ",")[[1]])
+  prof$E3_G <- NA
+}
 n_folds <- 5L
 outer_seed <- 2026L
 train_months_E1 <- 18L

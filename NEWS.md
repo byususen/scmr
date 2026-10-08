@@ -24,6 +24,9 @@ Dynamic spatially clustered multinomial regression (DSCMR-EN).
   strata), `simulate_scmr_panel()` (panel Markov generator with global, block,
   irregular and smooth patterns on supplied or random coordinates).
 - Iteration diagnostics record `Phi` and `LabelTerm`.
+- Fixed-lambda local fits use a warm-start path ending at the requested lambda
+  and retry with longer paths when glmnet stops early or fails (nearly
+  separable clusters with strong lag-state predictors).
 
 # scmr 0.4.0
 
