@@ -1,4 +1,31 @@
-# scmr 0.4.0 (development; not yet checked with R CMD check)
+# scmr 0.5.0
+
+Dynamic spatially clustered multinomial regression (DSCMR-EN).
+
+- Estimated spatial interaction: `scmr_control(phi_update = "pl")` replaces the
+  SCR label term by the Besag pseudo-log-likelihood of the Potts model and
+  estimates phi after every membership sweep by maximum pseudo-likelihood
+  (`scmr_potts_phi()`, concave in phi). Membership gains include the exact
+  change of the pseudo-likelihood of the moved unit and its neighbours, so the
+  alternation stays monotone. PLIC counts phi as one extra parameter.
+- Size-adaptive sum-scale penalty `penalty_size = "adaptive"`
+  (kappa * sqrt(n_g / n_bar)); the change of the multiplier enters the exact
+  membership gain, keeping monotonicity.
+- Panel dynamics: `scmr_lag_design()` builds previous-class indicators, so local
+  models become multinomial transition models. `scmr_filter_predict()` gives
+  exact forward-filtered probabilities when the previous class is unobserved
+  (wall-to-wall mapping); `scmr_impute_waves()` gives forward-backward posteriors
+  for missing survey waves, with cluster weights updated by the observed classes.
+- Prediction at unseen units: `predict(..., membership = "potts")` uses the
+  Potts full conditional with the fitted phi (`"proportion"`, the previous
+  behaviour, stays the default; `"majority"` reproduces SCR).
+- Comparators and study tools: `fit_gw_multinom_en()` (geographically weighted
+  multinomial elastic net), `scmr_block_folds()` (whole-block CV folds within
+  strata), `simulate_scmr_panel()` (panel Markov generator with global, block,
+  irregular and smooth patterns on supplied or random coordinates).
+- Iteration diagnostics record `Phi` and `LabelTerm`.
+
+# scmr 0.4.0
 
 - Monotone algorithm: `scmr_control(lambda_scale = "sum")` fixes one common
   sum-scale penalty strength kappa = mean(lambda) * n / G, standardizes predictors

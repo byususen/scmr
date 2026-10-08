@@ -52,6 +52,17 @@
 #' @param coef_init_alpha,coef_init_lambda Elastic-net settings of the local fits.
 #' @param coef_init_anchors Maximum number of anchor units at which local fits
 #'   are computed; other units take the features of their nearest anchor.
+#' @param phi_update `"fixed"` keeps `phi` and uses the SCR label term
+#'   phi * (sum of agreeing edge weights); `"pl"` replaces it by the Besag
+#'   pseudo-log-likelihood of the Potts model and estimates phi by maximum
+#'   pseudo-likelihood after every membership sweep (see [scmr_potts_phi()]);
+#'   `phi` is then the starting value.
+#' @param phi_max Upper bound for the estimated phi.
+#' @param penalty_size Sum-scale penalty strength per cluster: `"common"`
+#'   (kappa for every cluster) or `"adaptive"` (kappa * sqrt(n_g / n_bar), less
+#'   shrinkage per observation for small clusters). The change of the penalty
+#'   multiplier is part of the exact membership gain, so the algorithm stays
+#'   monotone.
 #' @param verbose Print iteration progress when true.
 #' @return A named list of control settings.
 #' @export
@@ -96,7 +107,12 @@ scmr_control <- function(
     coef_init_alpha = 0.2,
     coef_init_lambda = 0.05,
     coef_init_anchors = 300L,
+    phi_update = c("fixed", "pl"),
+    phi_max = 20,
+    penalty_size = c("common", "adaptive"),
     verbose = FALSE) {
+  phi_update <- match.arg(phi_update)
+  penalty_size <- match.arg(penalty_size)
   weight_type <- match.arg(weight_type)
   init_method <- match.arg(init_method)
   lambda_scale <- match.arg(lambda_scale)
@@ -143,6 +159,9 @@ scmr_control <- function(
     coef_init_alpha = coef_init_alpha,
     coef_init_lambda = coef_init_lambda,
     coef_init_anchors = coef_init_anchors,
+    phi_update = phi_update,
+    phi_max = phi_max,
+    penalty_size = penalty_size,
     verbose = verbose
   )
   validate_scmr_control(out)
@@ -158,7 +177,8 @@ validate_scmr_control <- function(control) {
   }
   choices <- list(weight_type = c("binary", "exp"), init_method = c("kmeans", "random", "coefficient"),
     update_order = c("random", "fixed"), lambda_rule = c("lambda.min", "lambda.1se"),
-    type_multinomial = c("grouped", "ungrouped"))
+    type_multinomial = c("grouped", "ungrouped"), phi_update = c("fixed", "pl"),
+    penalty_size = c("common", "adaptive"))
   for (nm in names(choices)) {
     if (length(control[[nm]]) != 1L || !control[[nm]] %in% choices[[nm]]) stop("Invalid ", nm, call. = FALSE)
   }
@@ -170,6 +190,9 @@ validate_scmr_control <- function(control) {
     if (length(z) != 1L || !is.finite(z) || z < 1 || z != floor(z)) {
       stop(nm, " must be a positive integer.", call. = FALSE)
     }
+  }
+  if (length(control$phi_max) != 1L || !is.finite(control$phi_max) || control$phi_max <= 0) {
+    stop("phi_max must be positive.", call. = FALSE)
   }
   for (nm in c("phi", "lambda_1se_tol", "lambda_update_tol", "alpha_update_tol",
                "tiny_movement_max_units", "tiny_movement_rate_tol",

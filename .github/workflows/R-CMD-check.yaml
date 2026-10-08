@@ -28,8 +28,18 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: any::rcmdcheck, any::roxygen2
           needs: check
+      - name: Regenerate documentation
+        run: Rscript -e 'roxygen2::roxygenise()'
+      - name: Upload regenerated docs
+        if: matrix.config.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: roxygen-docs
+          path: |
+            man
+            NAMESPACE
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true

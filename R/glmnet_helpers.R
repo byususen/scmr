@@ -82,7 +82,8 @@ glmnet_design <- function(x) {
 
 fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
                                     standardize = TRUE,
-                                    type_multinomial = "grouped", maxit = 100000) {
+                                    type_multinomial = "grouped", maxit = 100000,
+                                    weights = NULL) {
   y <- factor(y, levels = class_levels)
   lambda <- as.numeric(lambda)[1]
   if (!is.finite(lambda) || lambda <= 0) stop("lambda must be positive.", call. = FALSE)
@@ -90,7 +91,8 @@ fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
   lambda_path <- lambda_path[is.finite(lambda_path) & lambda_path > 0]
   fit <- glmnet::glmnet(
     x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = lambda_path,
-    standardize = standardize, type.multinomial = type_multinomial, maxit = maxit
+    standardize = standardize, type.multinomial = type_multinomial, maxit = maxit,
+    weights = weights %||% rep(1, nrow(x))
   )
   if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
     stop("The glmnet path did not reach the requested lambda; inspect solver limits.", call. = FALSE)

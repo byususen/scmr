@@ -5,6 +5,9 @@
 #' @param new_coords Coordinates for spatial prediction.
 #' @param type Return probabilities, classes, or cluster membership weights.
 #' @param cluster Fixed cluster labels for fixed-membership prediction.
+#' @param membership Rule for the cluster weights of unseen units:
+#'   `"proportion"` (share of neighbours), `"potts"` (Potts full conditional
+#'   with the fitted phi) or `"majority"` (hard majority, as in SCR).
 #' @param parameterization Return native or sum-to-zero coefficients.
 #' @param ... Reserved arguments.
 #' @return predict returns a matrix or factor; coef returns a cluster-by-class-
@@ -12,7 +15,15 @@
 #' @name scmr-methods
 NULL
 
-assign_test_PP <- function(fit, new_unit_id, new_coords, n = length(new_unit_id)) {
+# Membership weights of prediction rows. Training units keep their estimated
+# label. An unseen unit gets weights from its k nearest training units:
+#   "proportion": share of (kernel-weighted) neighbours in each cluster (default);
+#   "potts":      Potts full conditional softmax(phi * S_0(h)), S_0 = neighbour
+#                 support; the Bayes predictive mixture under the label model;
+#   "majority":   all weight on the cluster with the largest support (SCR rule).
+assign_test_PP <- function(fit, new_unit_id, new_coords, n = length(new_unit_id),
+                           rule = c("proportion", "potts", "majority")) {
+  rule <- match.arg(rule)
   G <- fit$G
   if (G == 1L) return(matrix(1, n, 1L, dimnames = list(NULL, "G1")))
   if (length(new_unit_id) != n || anyNA(new_unit_id)) stop("Supply new_unit_id for every prediction row.", call. = FALSE)
@@ -27,6 +38,7 @@ assign_test_PP <- function(fit, new_unit_id, new_coords, n = length(new_unit_id)
     coords <- get_unit_coords(new_unit_id, new_coords)
     coords <- coords[match(new_units, sort(unique(new_unit_id))), , drop = FALSE]
   }
+  phi <- fit$phi %||% fit$control$phi
   pp <- matrix(0, length(new_units), G, dimnames = list(new_units, paste0("G", seq_len(G))))
   for (i in seq_along(new_units)) {
     if (!unseen[i]) {
@@ -39,7 +51,11 @@ assign_test_PP <- function(fit, new_unit_id, new_coords, n = length(new_unit_id)
         logw <- -(distance[nn] / fit$bandwidth_used)^2
         exp(logw - max(logw))
       }
-      pp[i, ] <- colSums(fit$PP_unit[nn, , drop = FALSE] * (weights / sum(weights)))
+      support <- colSums(fit$PP_unit[nn, , drop = FALSE] * weights)
+      pp[i, ] <- switch(rule,
+        proportion = support / sum(support),
+        potts = { a <- phi * support; e <- exp(a - max(a)); e / sum(e) },
+        majority = { z <- numeric(G); z[which.max(support)] <- 1; z })
     }
   }
   normalize_prob_matrix(pp[new_unit_id, , drop = FALSE], colnames(pp), n)
@@ -48,8 +64,10 @@ assign_test_PP <- function(fit, new_unit_id, new_coords, n = length(new_unit_id)
 #' @rdname scmr-methods
 #' @export
 predict.scmr_fit <- function(object, newx, new_unit_id = NULL, new_coords = NULL,
-                              type = c("prob", "class", "membership"), cluster = NULL, ...) {
+                              type = c("prob", "class", "membership"), cluster = NULL,
+                              membership = c("proportion", "potts", "majority"), ...) {
   type <- match.arg(type)
+  membership <- match.arg(membership)
   newx <- check_newx(newx, object$x_colnames)
   n <- nrow(newx)
   if (object$model == "fixed_clusters") {
@@ -61,7 +79,7 @@ predict.scmr_fit <- function(object, newx, new_unit_id = NULL, new_coords = NULL
   } else if (object$model == "global") {
     pp <- matrix(1, n, 1L, dimnames = list(NULL, "G1"))
   } else {
-    pp <- assign_test_PP(object, new_unit_id, new_coords, n)
+    pp <- assign_test_PP(object, new_unit_id, new_coords, n, membership)
   }
   if (type == "membership") return(pp)
   prob <- matrix(0, n, length(object$class_levels), dimnames = list(NULL, object$class_levels))

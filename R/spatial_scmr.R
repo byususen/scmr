@@ -1,5 +1,12 @@
 # One membership algorithm for penalized and unpenalized local engines.
-membership_sweep <- function(fits, data, groups, unit_levels, w, control, seed) {
+# Each unit moves to the feasible cluster with the largest exact gain of the
+# objective Q = loglik + label term - penalty, given the current coefficients:
+#   label = "fixed": label term phi * sum of agreeing edge weights (SCR);
+#   label = "pl":    label term log PL(g; phi) (Besag pseudo-likelihood);
+#   pen (optional):  size-adaptive penalty, list(kappa_of, P) with kappa_of(n_g)
+#                    the multiplier of the fixed penalty value P[g] = P(B_g).
+membership_sweep <- function(fits, data, groups, unit_levels, w, control, seed,
+                             phi = control$phi, label = "fixed", pen = NULL) {
   G <- length(fits)
   unit_num <- match(data$unit_id, unit_levels)
   rows <- split(seq_len(nrow(data$x)), factor(unit_num, levels = seq_along(unit_levels)))
@@ -12,19 +19,34 @@ membership_sweep <- function(fits, data, groups, unit_levels, w, control, seed) 
   unit_ll <- matrix(0, length(unit_levels), G)
   # Aggregate explicitly in unit-level order; input rows need not be sorted.
   for (u in seq_along(rows)) unit_ll[u, ] <- colSums(row_ll[rows[[u]], , drop = FALSE])
+  nb <- potts_neighbors(w)
+  S <- potts_support(w, groups, G)
   order_u <- if (control$update_order == "random") with_scmr_seed(seed, sample.int(length(groups))) else seq_along(groups)
   changes <- 0L
+  gain_total <- 0
   for (u in order_u) {
     old <- groups[u]
-    weights <- as.numeric(w[u, ])
-    nn <- which(weights != 0)
-    neighbor <- vapply(seq_len(G), function(g) sum(weights[nn][groups[nn] == g]), numeric(1))
-    score <- unit_ll[u, ] + control$phi * neighbor
-    for (candidate in order(score, decreasing = TRUE)) {
-      if (score[candidate] <= score[old] + 1e-12) break
+    gain <- unit_ll[u, ] - unit_ll[u, old]
+    if (label == "pl") {
+      for (h in seq_len(G)) if (h != old) gain[h] <- gain[h] + potts_delta_logpl(u, h, groups, S, nb, phi)
+    } else {
+      gain <- gain + phi * (S[u, ] - S[u, old])
+    }
+    if (!is.null(pen)) {
+      tu <- contrib$unit_total[u]
+      n_now <- counts$total_count
+      d_old <- (pen$kappa_of(n_now[old] - tu) - pen$kappa_of(n_now[old])) * pen$P[old]
+      for (h in seq_len(G)) if (h != old) {
+        gain[h] <- gain[h] - d_old - (pen$kappa_of(n_now[h] + tu) - pen$kappa_of(n_now[h])) * pen$P[h]
+      }
+    }
+    gain[old] <- 0
+    for (candidate in order(gain, decreasing = TRUE)) {
+      if (gain[candidate] <= 1e-10) break
       if (!move_is_feasible(u, candidate, groups, counts$unit_count, counts$class_count,
                              contrib$unit_class, control$min_units, min_class)) next
       groups[u] <- candidate
+      S <- potts_update_support(S, u, old, candidate, nb)
       counts$unit_count[old] <- counts$unit_count[old] - 1L
       counts$unit_count[candidate] <- counts$unit_count[candidate] + 1L
       counts$total_count[old] <- counts$total_count[old] - contrib$unit_total[u]
@@ -32,21 +54,29 @@ membership_sweep <- function(fits, data, groups, unit_levels, w, control, seed) 
       counts$class_count[old, ] <- counts$class_count[old, ] - contrib$unit_class[u, ]
       counts$class_count[candidate, ] <- counts$class_count[candidate, ] + contrib$unit_class[u, ]
       changes <- changes + 1L
+      gain_total <- gain_total + gain[candidate]
       break
     }
   }
-  list(groups = groups, changes = changes, row_ll = row_ll)
+  list(groups = groups, changes = changes, row_ll = row_ll, gain = gain_total)
 }
 
-# Penalty term sum_g s_g * P(B_g). In sum-scale mode s_g is fixed (glmnet lambda
-# times the cluster size at fitting time); in mean-scale mode s_g = n_g * lambda_g
-# changes with the current cluster size n_g.
-partition_penalty <- function(fits, groups, sum_scale = FALSE) {
+# Penalty term sum_g s_g * P(B_g). In sum-scale mode s_g = kappa_g, the
+# sum-scale strength (common, or kappa_of(n_g) when size-adaptive); in
+# mean-scale mode s_g = n_g * lambda_g changes with the current cluster size n_g.
+partition_penalty <- function(fits, groups, sum_scale = FALSE, kappa_of = NULL) {
   sum(vapply(seq_along(fits), function(g) {
     if (fits[[g]]$kind != "glmnet") return(0)
-    size <- if (sum_scale) fits[[g]]$n_fit else sum(groups == g)
-    size * fits[[g]]$lambda * engine_penalty(fits[[g]])
+    size <- sum(groups == g)
+    mult <- if (!is.null(kappa_of)) kappa_of(size) else if (sum_scale) fits[[g]]$n_fit * fits[[g]]$lambda else size * fits[[g]]$lambda
+    mult * engine_penalty(fits[[g]])
   }, numeric(1)))
+}
+
+# Label term of the objective.
+label_term <- function(w, unit_groups, phi, label, G) {
+  if (is.null(w)) return(0)
+  if (label == "pl") potts_log_pseudolikelihood(w, unit_groups, phi, G) else phi * spatial_bonus(w, unit_groups)
 }
 
 fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
@@ -84,23 +114,31 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     control$tune_alpha_after_convergence && !sum_scale
   local_retune <- tune_lambda && !sum_scale
   update <- model == "scmr" && control$update_memberships
+  label <- if (model == "scmr" && control$phi_update == "pl") "pl" else "fixed"
+  adaptive <- sum_scale && control$penalty_size == "adaptive"
+  n_bar <- nrow(data$x) / G
+  # Sum-scale strength of a cluster with n rows: kappa (common) or
+  # kappa * sqrt(n / n_bar) (size-adaptive); lambda[g] holds kappa.
+  kappa_fun <- function(kappa) {
+    if (adaptive) function(n) kappa * sqrt(pmax(n, 0) / n_bar) else function(n) rep(kappa, length(n))
+  }
 
   fit_groups <- function(groups, alpha, lambda) {
     lapply(seq_len(G), function(g) {
       idx <- which(groups == g)
-      lam <- if (penalty == "none") NA_real_ else if (sum_scale) lambda[g] / length(idx) else lambda[g]
+      lam <- if (penalty == "none") NA_real_ else if (sum_scale) kappa_fun(lambda[g])(length(idx)) / length(idx) else lambda[g]
       engine <- fit_local_engine(data$x[idx, , drop = FALSE], data$y[idx], penalty, alpha, lam, control, pre)
       engine$n_fit <- length(idx)
       engine
     })
   }
-  objective_of <- function(fits, groups, unit_groups) {
+  objective_of <- function(fits, groups, unit_groups, phi) {
     ll <- sum(vapply(seq_len(G), function(g) {
       idx <- which(groups == g)
       sum(true_class_logp(engine_predict(fits[[g]], data$x[idx, , drop = FALSE]),
                           data$y[idx], levels(data$y)))
     }, numeric(1)))
-    ll + control$phi * spatial_bonus(w, unit_groups) - partition_penalty(fits, groups, sum_scale)
+    ll + label_term(w, unit_groups, phi, label, G) - partition_penalty(fits, groups, sum_scale)
   }
 
   shared <- NULL
@@ -130,11 +168,21 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     reason <- if (model == "fixed_clusters") "fixed_memberships" else
       if (!update) "two_stage_initial_partition" else "max_iter_reached"
     tiny <- FALSE
+    phi <- control$phi
+    phi_step <- function(unit_groups, phi) {
+      if (label != "pl" || G < 2L) return(phi)
+      as.numeric(scmr_potts_phi(w, unit_groups, G, phi, control$phi_max))
+    }
+    # Block coordinate ascent: phi | g, then repeatedly B | g, g | (B, phi), phi | g.
+    if (update) phi <- phi_step(unit_groups, phi)
     if (update) for (iter in seq_len(control$max_iter)) {
       fits <- fit_groups(groups, alpha, lam)
       old <- unit_groups
+      pen <- if (adaptive) list(kappa_of = kappa_fun(lam[1]),
+                                P = vapply(fits, function(f) if (f$kind == "glmnet") engine_penalty(f) else 0, numeric(1))) else NULL
       sweep <- membership_sweep(fits, data, unit_groups, units, w, control,
-                                scmr_seed(seed, 100000 + iter + 7919L * (start_id - 1L)))
+                                scmr_seed(seed, 100000 + iter + 7919L * (start_id - 1L)),
+                                phi = phi, label = label, pen = pen)
       unit_groups <- sweep$groups
       # The monotone (sum-scale) algorithm stops only at zero changes or max_iter;
       # the legacy tiny-movement rule (and its revert) would break monotonicity.
@@ -144,12 +192,15 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       reverted <- tiny && control$tiny_movement_revert
       if (reverted) unit_groups <- old
       groups <- unit_groups[unit_num]
+      phi <- phi_step(unit_groups, phi)
       ll <- sum(sweep$row_ll[cbind(seq_len(nrow(data$x)), groups)])
       bonus <- spatial_bonus(w, unit_groups)
-      # Q evaluated at (current coefficients, updated memberships).
+      lab <- label_term(w, unit_groups, phi, label, G)
+      # Q evaluated at (current coefficients, updated memberships, updated phi).
       iterations[[iter]] <- data.frame(Start = start_id, Iter = iter, LogLik = ll, SpatialBonus = bonus,
-        Objective = ll + control$phi * bonus,
-        PenalizedObjective = ll + control$phi * bonus - partition_penalty(fits, groups, sum_scale),
+        Phi = phi, LabelTerm = lab, Objective = ll + lab,
+        PenalizedObjective = ll + lab - partition_penalty(fits, groups, sum_scale,
+                                                          if (adaptive) kappa_fun(lam[1]) else NULL),
         Changes = sweep$changes, AcceptedChanges = if (reverted) 0L else sweep$changes,
         Reverted = reverted)
       if (control$verbose) message("SCMR G=", G, " start=", start_id, " iteration=", iter,
@@ -179,7 +230,8 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     }
     fits <- fit_groups(groups, alpha, lam)
     if (update && alpha_changed) {
-      check <- membership_sweep(fits, data, unit_groups, units, w, control, scmr_seed(seed, 200000))
+      check <- membership_sweep(fits, data, unit_groups, units, w, control, scmr_seed(seed, 200000),
+                                phi = phi, label = label)
       if (check$changes > 0L) {
         membership_converged <- FALSE
         reason <- "membership_not_stationary_after_final_tuning"
@@ -187,8 +239,8 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     }
     list(unit_groups = unit_groups, groups = groups, fits = fits, tuning = tuning,
          iterations = iterations, membership_converged = membership_converged,
-         reason = reason, tune_seconds = tune_seconds,
-         objective = objective_of(fits, groups, unit_groups))
+         reason = reason, tune_seconds = tune_seconds, phi = phi,
+         objective = objective_of(fits, groups, unit_groups, phi))
   }
 
   starts <- data.frame()
@@ -233,7 +285,10 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
   } else {
     best <- run_start(fixed_unit_groups, 1L)
   }
-  ans <- new_scmr_fit(model, penalty, best$fits, data, best$groups, control, seed,
+  fit_control <- control
+  fit_control$phi <- best$phi %||% control$phi
+  fit_control$phi_update <- label
+  ans <- new_scmr_fit(model, penalty, best$fits, data, best$groups, fit_control, seed,
                       bind_diagnostics(best$tuning), bind_diagnostics(best$iterations),
                       best$membership_converged, best$reason, w, bandwidth, fixed_levels)
   ans$lambda_rule <- if (penalty == "none") "none" else if (tune_lambda) "holdout_tolerance" else "fixed"
@@ -242,6 +297,8 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
   ans$runtime_tuning <- sum(vapply(if (model == "scmr") results else list(best),
                                    function(z) z$tune_seconds, numeric(1)))
   ans$diagnostics$starts <- starts
+  ans$phi <- fit_control$phi
+  ans$penalty_size <- if (adaptive) "adaptive" else "common"
   ans
 }
 
