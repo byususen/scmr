@@ -58,6 +58,17 @@ run_article_simulation <- function(cfg = article_config()) {
     }
     datasets <- data_bundle$datasets; train <- datasets$Train
     globals <- list()
+    # Local coefficient features are computed once per dataset and reused across G.
+    feature_cache <- NULL
+    local_features <- function() {
+      if (is.null(feature_cache)) {
+        mc <- article_run_control(cfg, "SCMR-EN-MS")
+        feature_cache <<- scmr::scmr_local_coefficients(train$X, train$y, train$unit, train$coords,
+          k = mc$coef_init_k, alpha = mc$coef_init_alpha, lambda = mc$coef_init_lambda,
+          anchors = mc$coef_init_anchors, type_multinomial = mc$type_multinomial, seed = meta$Seed)
+      }
+      feature_cache
+    }
     for (j in seq_len(nrow(models))) {
       run <- models[j, , drop = FALSE]
       path <- file.path(out, "runs", paste0(run$RunID, ".rds"))
@@ -73,7 +84,8 @@ run_article_simulation <- function(cfg = article_config()) {
           x = train$X, y = train$y, model = run$Mode, penalty = run$Penalty, G = run$G,
           unit_id = train$unit, coords = train$coords,
           cluster = if (run$Mode == "fixed_clusters") train$true_cluster else NULL,
-          control = cfg$fit_control, nfolds = cfg$nfolds, seed = meta$Seed)
+          control = article_run_control(cfg, run$Model), nfolds = cfg$nfolds, seed = meta$Seed,
+          init_features = if (run$Model == "SCMR-EN-MS") local_features() else NULL)
         if (run$Mode == "global") globals[[run$Penalty]] <- fit
         bundle <- article_evaluate(fit, datasets, run, cfg, reused)
         article_save(bundle, path)

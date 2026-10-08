@@ -6,6 +6,21 @@ spatial_bonus <- function(w, groups) {
   sum(entries$x[groups[entries$i] == groups[entries$j]]) / 2
 }
 
+# Besag pseudo-log-likelihood of unit labels under the Potts prior used by SCMR:
+#   sum_r [ phi * S_r(g_r) - log sum_h exp(phi * S_r(h)) ],
+#   S_r(h) = sum_q w_rq I(g_q = h).
+# Zero for one cluster or without spatial weights. Used by the PLIC criteria
+# (cf. Stanford and Raftery, 2002; Forbes and Peyrard, 2003).
+potts_log_pseudolikelihood <- function(w, groups, phi, G = max(groups)) {
+  if (is.null(w) || G <= 1L || phi == 0) return(0)
+  groups <- as.integer(groups)
+  onehot <- matrix(0, length(groups), G)
+  onehot[cbind(seq_along(groups), groups)] <- 1
+  a <- phi * as.matrix(w %*% onehot)
+  amax <- apply(a, 1L, max)
+  sum(a[cbind(seq_along(groups), groups)] - amax - log(rowSums(exp(a - amax))))
+}
+
 scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
                               w = NULL, group_unit = NULL) {
   g_total <- length(fits)
@@ -74,5 +89,18 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
     CriterionCB_AIC = cb_fit + 2 * df_eff,
     cluster_components = parts)
   criteria$CriterionV3_CB_uBIC <- criteria$CriterionCB_BIC
+  # Potts pseudo-likelihood criteria: likelihood + label cost + EDF penalty.
+  # They score the same joint (data, labels) model that the algorithm fits, so
+  # partition complexity enters model selection, unlike the five criteria above.
+  logpl <- if (is.null(group_unit)) 0 else potts_log_pseudolikelihood(w, group_unit, control$phi, g_total)
+  criteria$PottsLogPseudoLik <- logpl
+  criteria$CriterionPLIC_BIC <- -2 * ll - 2 * logpl + log(n) * df_eff
+  criteria$CriterionPLIC_AIC <- -2 * ll - 2 * logpl + 2 * df_eff
+  # Penalized objective actually maximized by the alternating algorithm.
+  lambda_sum <- vapply(seq_len(g_total), function(g) {
+    if (fits[[g]]$kind != "glmnet") return(0)
+    sum(row_group == g) * fits[[g]]$lambda * engine_penalty(fits[[g]])
+  }, numeric(1))
+  criteria$PenalizedObjective <- criteria$objective_value - sum(lambda_sum)
   criteria
 }

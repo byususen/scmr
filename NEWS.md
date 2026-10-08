@@ -1,3 +1,23 @@
+# scmr 0.4.0 (development; not yet checked with R CMD check)
+
+- Monotone algorithm: `scmr_control(lambda_scale = "sum")` fixes the cluster
+  penalty strengths lambda_g * n_g after initial tuning, standardizes predictors
+  once globally and skips tuning inside the alternation. Every membership move
+  and every refit then increases the penalized Potts objective, which is
+  recorded per iteration as `PenalizedObjective`.
+- Coefficient-space initialization (`init_method = "coefficient"`,
+  `scmr_local_coefficients()`) and multi-start fitting (`n_starts`,
+  `start_methods`); the start with the largest penalized objective is returned
+  and all starts are listed in `diagnostics$starts`.
+- Two-stage benchmark: `update_memberships = FALSE` keeps the initial partition.
+- New criteria `CriterionPLIC_BIC` and `CriterionPLIC_AIC`: ordinary likelihood,
+  Potts pseudo-likelihood label cost, and EDF penalty. `PottsLogPseudoLik` and
+  `PenalizedObjective` are reported in `criteria`.
+- New data-generating scenario `"clustered_irregular"` (three disconnected
+  regimes on a Latin-square tiling); study support for the extra models
+  `"TwoStage-EN"` and `"SCMR-EN-MS"` and for PLIC selection reports.
+- Default behaviour is unchanged.
+
 # scmr 0.3.0
 
 - Separate model fitting in `R/` from the article study in `inst/simulation/`.
