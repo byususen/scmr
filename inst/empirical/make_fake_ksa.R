@@ -3,12 +3,15 @@
 # Usage: Rscript make_fake_ksa.R <output.csv>
 suppressPackageStartupMessages(library(scmr))
 out <- commandArgs(trailingOnly = TRUE)[1]
+n_seg <- as.integer(Sys.getenv("FAKE_SEGMENTS", "12"))      # segments per regency
+n_extra <- as.integer(Sys.getenv("FAKE_EXTRA", "0"))        # extra noise features
+gap_prop <- as.numeric(Sys.getenv("FAKE_GAPS", "0"))         # share of rows dropped
 set.seed(1)
 reg <- c("3205", "3212", "6171")
 centre <- rbind(c(-7.4, 107.6), c(-6.4, 108.2), c(-0.05, 109.3))
 seg <- do.call(rbind, lapply(seq_along(reg), function(r) data.frame(
-  id_segmen = sprintf("%s%05d", reg[r], seq_len(12)),
-  lat = centre[r, 1] + runif(12, -0.15, 0.15), lon = centre[r, 2] + runif(12, -0.15, 0.15))))
+  id_segmen = sprintf("%s%05d", reg[r], seq_len(n_seg)),
+  lat = centre[r, 1] + runif(n_seg, -0.15, 0.15), lon = centre[r, 2] + runif(n_seg, -0.15, 0.15))))
 sub <- do.call(rbind, lapply(seq_len(nrow(seg)), function(i) {
   g <- expand.grid(a = 1:3, b = 1:3)
   data.frame(id_segmen = seg$id_segmen[i], id_subsegmen = paste0(seg$id_segmen[i], LETTERS[g$a], g$b),
@@ -34,5 +37,14 @@ d <- data.frame(id_segmen = sub$id_segmen[u], id_subsegmen = sub$id_subsegmen[u]
                 s2r_last_NDVI_stms = rnorm(nrow(sim$x)),
                 year = year, month = month, month_end = sprintf("%d-%02d-28", year, month))
 d$s1_med_vv_stms[sample(nrow(d), 30)] <- NA
+if (n_extra > 0) {
+  vi <- c("CI_red_edge", "EVI2", "GNDVI", "MNDWI", "MSAVI", "NDRE", "NIRv", "PSRI")
+  for (j in seq_len(n_extra)) {
+    nm <- sprintf("s2r_med_%s_stms_lag%d", vi[(j - 1) %% length(vi) + 1], (j - 1) %/% length(vi) + 1)
+    if (nm %in% names(d)) nm <- paste0("s2r_month_", vi[(j - 1) %% length(vi) + 1], "_stms_slope", j)
+    d[[nm]] <- 0.5 * sim$x[, (j %% 8) + 1] + rnorm(nrow(d))
+  }
+}
+if (gap_prop > 0) d <- d[-sample(nrow(d), round(gap_prop * nrow(d))), ]
 utils::write.csv(d, out, row.names = FALSE)
 cat("Wrote", nrow(d), "rows to", out, "\n")

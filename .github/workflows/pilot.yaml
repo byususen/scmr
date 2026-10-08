@@ -61,8 +61,10 @@ jobs:
         run: |
           out="$RUNNER_TEMP/emp_out"
           mkdir -p "$out"
+          # Optional settings for a larger synthetic run: inst/empirical/ci_env.txt (KEY=VALUE lines)
+          if [ -f inst/empirical/ci_env.txt ]; then set -a; . inst/empirical/ci_env.txt; set +a; fi
           Rscript inst/empirical/make_fake_ksa.R "$RUNNER_TEMP/fake.csv"
-          SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE=ci \
+          SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
             Rscript inst/empirical/SCMR_EN_empirical_article_v3.R 2>&1 | tee "$out/log.txt"
       - name: Publish results to branch ci-logs/empirical-<tag>
         if: always()

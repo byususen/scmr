@@ -326,9 +326,14 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   invisible(bundle)
 }
 safe_run <- function(design, fold, model, G, ...) {
-  tryCatch(run_model(design, fold, model, G, ...), error = function(e) {
-    saveRDS(list(message = conditionMessage(e)), err_file(design, fold, model, G))
+  calls <- NULL
+  tryCatch(withCallingHandlers(run_model(design, fold, model, G, ...), error = function(e) {
+    calls <<- vapply(sys.calls(), function(cl) paste(deparse(cl, nlines = 1L), collapse = ""), character(1))
+  }), error = function(e) {
+    saveRDS(list(message = conditionMessage(e), calls = calls), err_file(design, fold, model, G))
     cat("  ", model, "G =", G, "FAILED:", conditionMessage(e), "\n")
+    keep <- calls[!grepl("^(tryCatch|withCallingHandlers|doTryCatch|tryCatchList|tryCatchOne|simpleError|stop|h\\()", calls)]
+    cat("    call stack (innermost last):\n", paste0("      ", utils::tail(substr(keep, 1, 110), 12), collapse = "\n"), "\n")
     NULL
   })
 }
