@@ -19,7 +19,7 @@ suppressPackageStartupMessages(library(scmr))
 
 opt <- list(reps = 3L, n_units = 150L, n_time = 24L, patterns = "irregular,blocks,global",
             G = 3L, delta = 1, out = "dynamic_pilot", cores = 1L, theory = TRUE,
-            G_grid = "1,2,3,4,5", p_active = 5L, p_inactive = 10L)
+            G_grid = "1,2,3,4,5", p_active = 5L, p_inactive = 10L, coef_k = 30L, n_starts = 3L)
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
   if (length(kv) == 2L && kv[1] %in% names(opt)) opt[[kv[1]]] <- utils::type.convert(kv[2], as.is = TRUE)
@@ -88,7 +88,7 @@ run_dataset <- function(pattern, rep) {
   nw <- !tr
   Gt <- if (pattern == "global") 1L else if (pattern == "smooth") opt$G else opt$G
   base <- list(lambda_scale = "sum", type_multinomial = "ungrouped", min_units = 8, min_per_class = 3,
-               max_iter = 30L, n_starts = 3L, coef_init_k = 30L, coef_init_anchors = 200L,
+               max_iter = 30L, n_starts = as.integer(opt$n_starts), coef_init_k = as.integer(opt$coef_k), coef_init_anchors = 200L,
                coef_init_alpha = 0.1, coef_init_lambda = 0.0625, k_neighbors = 8,
                tiny_movement_max_units = 0, tiny_movement_rate_tol = 0, tiny_movement_revert = FALSE,
                alpha_grid = 0.5, lambda_rule = "lambda.min")
