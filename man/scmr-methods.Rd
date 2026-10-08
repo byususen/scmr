@@ -15,6 +15,7 @@
   new_coords = NULL,
   type = c("prob", "class", "membership"),
   cluster = NULL,
+  membership = c("proportion", "potts", "majority"),
   ...
 )
 
@@ -36,6 +37,10 @@
 \item{type}{Return probabilities, classes, or cluster membership weights.}
 
 \item{cluster}{Fixed cluster labels for fixed-membership prediction.}
+
+\item{membership}{Rule for the cluster weights of unseen units:
+\code{"proportion"} (share of neighbours), \code{"potts"} (Potts full conditional
+with the fitted phi) or \code{"majority"} (hard majority, as in SCR).}
 
 \item{...}{Reserved arguments.}
 

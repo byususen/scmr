@@ -1,16 +1,10 @@
 name: dynamic-pilot
 
+# Runs on every push to a branch named pilot/<tag>; the arguments are read from
+# inst/simulation/dynamic/pilot_args.txt; results go to branch ci-logs/pilot-<tag>.
 on:
-  workflow_dispatch:
-    inputs:
-      args:
-        description: 'Arguments for inst/simulation/dynamic/pilot.R'
-        required: false
-        default: 'reps=3 n_units=150 n_time=24 patterns=irregular,blocks,global cores=4'
-      tag:
-        description: 'Name of the results branch suffix'
-        required: false
-        default: 'pilot'
+  push:
+    branches: ['pilot/**']
 
 permissions:
   contents: write
@@ -33,16 +27,18 @@ jobs:
       - name: Run pilot
         run: |
           mkdir -p "$RUNNER_TEMP/pilot_out"
-          Rscript inst/simulation/dynamic/pilot.R ${{ github.event.inputs.args }} out="$RUNNER_TEMP/pilot_out" 2>&1 | tee "$RUNNER_TEMP/pilot_out/log.txt"
+          ARGS=$(cat inst/simulation/dynamic/pilot_args.txt)
+          echo "$ARGS" > "$RUNNER_TEMP/pilot_out/args.txt"
+          Rscript inst/simulation/dynamic/pilot.R $ARGS out="$RUNNER_TEMP/pilot_out" 2>&1 | tee "$RUNNER_TEMP/pilot_out/log.txt"
       - name: Publish results to branch ci-logs/<tag>
         if: always()
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd "$RUNNER_TEMP/pilot_out"
-          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID} args: ${{ github.event.inputs.args }}" > RUN.txt
+          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID}" > RUN.txt
           git init -q
           git checkout -q -b logs
           git add -A
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Pilot ${GITHUB_RUN_ID}"
-          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/${{ github.event.inputs.tag }}
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/pilot-${GITHUB_REF_NAME#pilot/}

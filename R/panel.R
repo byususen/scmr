@@ -89,7 +89,7 @@ initial_distribution <- function(fit, init, units) {
 #' over consecutive time points with features x_1, ..., x_T but no classes,
 #' the exact predictive probabilities under the fitted model are obtained by
 #' the forward recursion
-#' alpha_t(c) = sum_k p_g(c | k, x_t) alpha_{t-1}(k), computed per cluster and
+#' alpha_t(c) = sum_k p_g(c | k, x_t) alpha_(t-1)(k), computed per cluster and
 #' mixed with the unit's cluster weights. A gap in time restarts the recursion
 #' from the initial distribution.
 #' @param fit A fitted `scmr_fit` whose predictors include `lag_columns`.

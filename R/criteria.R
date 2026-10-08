@@ -12,7 +12,7 @@ spatial_bonus <- function(w, groups) {
 # Zero for one cluster or without spatial weights. Used by the PLIC criteria
 # (cf. Stanford and Raftery, 2002; Forbes and Peyrard, 2003).
 potts_log_pseudolikelihood <- function(w, groups, phi, G = max(groups)) {
-  if (is.null(w) || G <= 1L || phi == 0) return(0)
+  if (is.null(w) || G <= 1L) return(0)
   groups <- as.integer(groups)
   onehot <- matrix(0, length(groups), G)
   onehot[cbind(seq_along(groups), groups)] <- 1

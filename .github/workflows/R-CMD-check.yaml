@@ -1,6 +1,6 @@
 on:
   push:
-    branches: ['**', '!ci-logs/**']
+    branches: ['**', '!ci-logs/**', '!pilot/**']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
