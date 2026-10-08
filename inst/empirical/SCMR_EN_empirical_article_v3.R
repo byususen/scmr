@@ -32,6 +32,10 @@ run_profile <- Sys.getenv("SCMR_PROFILE", "pilot")   # "pilot" first, then "main
 
 designs_to_run <- c("E2_mapping", "E1_nowcast", "E3_imputation")
 use_gw <- TRUE                   # geographically weighted comparator (slow on full data)
+# Optional overrides (used to split the work into parallel cloud jobs):
+#   SCMR_DESIGNS="E2_mapping"  SCMR_FOLDS="1,2"  SCMR_USE_GW="FALSE"
+if (nzchar(Sys.getenv("SCMR_DESIGNS"))) designs_to_run <- strsplit(Sys.getenv("SCMR_DESIGNS"), ",")[[1]]
+if (nzchar(Sys.getenv("SCMR_USE_GW"))) use_gw <- as.logical(Sys.getenv("SCMR_USE_GW"))
 use_lightgbm <- requireNamespace("lightgbm", quietly = TRUE)
 
 profiles <- list(
@@ -46,6 +50,7 @@ profiles <- list(
                gw_k = c(50, 100, 200, 400), coef_k = 12L, coef_anchors = 600L, E3_G = NA))
 if (!run_profile %in% names(profiles)) stop("Unknown profile: ", run_profile)
 prof <- profiles[[run_profile]]
+if (nzchar(Sys.getenv("SCMR_FOLDS"))) prof$folds <- as.integer(strsplit(Sys.getenv("SCMR_FOLDS"), ",")[[1]])
 n_folds <- 5L
 outer_seed <- 2026L
 train_months_E1 <- 18L
@@ -98,8 +103,10 @@ keep_feature_reduced <- function(nm) {
 }
 
 banner("LOAD DATA")
-raw <- utils::read.csv(data_file, stringsAsFactors = FALSE,
-                       colClasses = c(id_segmen = "character", id_subsegmen = "character", id_month = "character"))
+raw <- if (grepl("\\.rds$", data_file, ignore.case = TRUE)) readRDS(data_file) else
+  utils::read.csv(data_file, stringsAsFactors = FALSE,
+                  colClasses = c(id_segmen = "character", id_subsegmen = "character", id_month = "character"))
+raw$id_segmen <- as.character(raw$id_segmen); raw$id_subsegmen <- as.character(raw$id_subsegmen)
 raw <- raw[, !grepl("last", names(raw)), drop = FALSE]
 raw$phase <- as.character(as.integer(round(as.numeric(raw$phase))))
 raw <- raw[!is.na(raw$phase) & raw$phase != "12", , drop = FALSE]
