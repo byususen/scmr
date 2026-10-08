@@ -103,13 +103,14 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     ll + control$phi * spatial_bonus(w, unit_groups) - partition_penalty(fits, groups, sum_scale)
   }
 
+  shared <- NULL
   run_start <- function(unit_groups, start_id) {
     groups <- unit_groups[unit_num]
     tuning <- list()
     tune_seconds <- 0
     alpha <- alpha_info$alpha_default
     lam <- if (penalty == "none") rep(NA_real_, G) else if (!is.null(lambda)) rep(lambda, length.out = G) else NULL
-    if (tune_lambda) {
+    if (tune_lambda && !(sum_scale && !is.null(shared))) {
       t0 <- proc.time()[["elapsed"]]
       init <- tune_initial_partition(xt, data$y, groups, alpha_info$alpha_grid, tctrl, seed)
       alpha <- init$alpha
@@ -117,8 +118,13 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       tuning[[length(tuning) + 1L]] <- init$trace
       tune_seconds <- tune_seconds + proc.time()[["elapsed"]] - t0
     }
-    # Convert the mean-scale lambda chosen on the initial partition to sum scale.
-    if (sum_scale) lam <- lam * tabulate(groups, G)
+    if (sum_scale) {
+      # One common sum-scale strength kappa = mean(lambda) * n / G for every
+      # cluster and every start, so penalized objectives are comparable.
+      if (is.null(shared)) shared <<- list(alpha = alpha, kappa = mean(lam) * nrow(data$x) / G)
+      alpha <- shared$alpha
+      lam <- rep(shared$kappa, G)
+    }
     iterations <- list()
     membership_converged <- !update
     reason <- if (model == "fixed_clusters") "fixed_memberships" else
