@@ -1,0 +1,158 @@
+Options:
+List of 12
+ $ reps      : int 10
+ $ n_units   : int 150
+ $ n_time    : int 12
+ $ patterns  : chr "irregular,blocks,global,smooth"
+ $ G         : int 3
+ $ delta     : num 1
+ $ out       : chr "/home/runner/work/_temp/pilot_out"
+ $ cores     : int 4
+ $ theory    : logi TRUE
+ $ G_grid    : chr "1,2,3,4,5"
+ $ p_active  : int 5
+ $ p_inactive: int 10
+
+== Oracle misassignment rate by T and phi ==
+     Pattern  T Phi  Misassigned
+1     blocks  1 0.0 0.4100000000
+2  irregular  1 0.0 0.4126666667
+3     blocks  2 0.0 0.2733333333
+4  irregular  2 0.0 0.2860000000
+5     blocks  4 0.0 0.1300000000
+6  irregular  4 0.0 0.1340000000
+7     blocks  8 0.0 0.0306666667
+8  irregular  8 0.0 0.0480000000
+9     blocks 12 0.0 0.0086666667
+10 irregular 12 0.0 0.0186666667
+11    blocks 24 0.0 0.0006666667
+12 irregular 24 0.0 0.0026666667
+13    blocks  1 0.5 0.0273333333
+14 irregular  1 0.5 0.0846666667
+15    blocks  2 0.5 0.0206666667
+16 irregular  2 0.5 0.0633333333
+17    blocks  4 0.5 0.0100000000
+18 irregular  4 0.5 0.0313333333
+19    blocks  8 0.5 0.0020000000
+20 irregular  8 0.5 0.0180000000
+21    blocks 12 0.5 0.0000000000
+22 irregular 12 0.5 0.0086666667
+23    blocks 24 0.5 0.0000000000
+24 irregular 24 0.5 0.0013333333
+25    blocks  1 1.0 0.0273333333
+26 irregular  1 1.0 0.0913333333
+27    blocks  2 1.0 0.0186666667
+28 irregular  2 1.0 0.0686666667
+29    blocks  4 1.0 0.0080000000
+30 irregular  4 1.0 0.0346666667
+31    blocks  8 1.0 0.0006666667
+32 irregular  8 1.0 0.0160000000
+33    blocks 12 1.0 0.0000000000
+34 irregular 12 1.0 0.0086666667
+35    blocks 24 1.0 0.0006666667
+36 irregular 24 1.0 0.0000000000
+37    blocks  1 2.0 0.0313333333
+38 irregular  1 2.0 0.0986666667
+39    blocks  2 2.0 0.0226666667
+40 irregular  2 2.0 0.0806666667
+41    blocks  4 2.0 0.0153333333
+42 irregular  4 2.0 0.0533333333
+43    blocks  8 2.0 0.0046666667
+44 irregular  8 2.0 0.0233333333
+45    blocks 12 2.0 0.0026666667
+46 irregular 12 2.0 0.0153333333
+47    blocks 24 2.0 0.0013333333
+48 irregular 24 2.0 0.0026666667
+
+Elapsed: 11.33323 mins 
+
+== Mean metrics at new locations ==
+     Pattern          Model         Mode  Kappa LogLoss TrainARI
+1     blocks       DSCMR-EN       filter 0.3992   1.246   1.0000
+2     global       DSCMR-EN       filter 0.2374   1.518       NA
+3  irregular       DSCMR-EN       filter 0.2842   1.470   0.2251
+4     smooth       DSCMR-EN       filter 0.2957   1.441       NA
+5     blocks  DSCMR-EN-phi1       filter 0.3987   1.250   0.9956
+6  irregular  DSCMR-EN-phi1       filter 0.2620   1.536   0.1151
+7     smooth  DSCMR-EN-phi1       filter 0.2858   1.454       NA
+8     blocks      Global-EN       filter 0.2417   1.536       NA
+9     global      Global-EN       filter 0.2374   1.518       NA
+10 irregular      Global-EN       filter 0.2581   1.515       NA
+11    smooth      Global-EN       filter 0.1605   1.642       NA
+12    blocks          GW-EN       filter 0.3518   1.334       NA
+13    global          GW-EN       filter 0.2329   1.537       NA
+14 irregular          GW-EN       filter 0.2550   1.506       NA
+15    smooth          GW-EN       filter 0.3416   1.348       NA
+16    blocks        TCMR-EN       filter 0.4131   1.216       NA
+17 irregular        TCMR-EN       filter 0.4174   1.215       NA
+18    blocks    TwoStage-EN       filter 0.3441   1.341   0.7526
+19 irregular    TwoStage-EN       filter 0.2307   1.556   0.0453
+20    smooth    TwoStage-EN       filter 0.2888   1.459       NA
+21    blocks       DSCMR-EN lag_observed 0.6888   0.673   1.0000
+22    global       DSCMR-EN lag_observed 0.6482   0.692       NA
+23 irregular       DSCMR-EN lag_observed 0.5607   0.912   0.2251
+24    smooth       DSCMR-EN lag_observed 0.6106   0.828       NA
+25    blocks  DSCMR-EN-phi1 lag_observed 0.6874   0.677   0.9956
+26 irregular  DSCMR-EN-phi1 lag_observed 0.5277   0.963   0.1151
+27    smooth  DSCMR-EN-phi1 lag_observed 0.6079   0.835       NA
+28    blocks      Global-EN lag_observed 0.5357   0.958       NA
+29    global      Global-EN lag_observed 0.6482   0.692       NA
+30 irregular      Global-EN lag_observed 0.5414   0.934       NA
+31    smooth      Global-EN lag_observed 0.4982   1.020       NA
+32    blocks          GW-EN lag_observed 0.6310   0.770       NA
+33    global          GW-EN lag_observed 0.6361   0.711       NA
+34 irregular          GW-EN lag_observed 0.5476   0.935       NA
+35    smooth          GW-EN lag_observed 0.6518   0.743       NA
+36    blocks SCMR-EN-static lag_observed 0.2859   1.441   0.9904
+37 irregular SCMR-EN-static lag_observed 0.2077   1.575   0.1928
+38    smooth SCMR-EN-static lag_observed 0.2184   1.559       NA
+39    blocks        TCMR-EN lag_observed 0.7074   0.642       NA
+40 irregular        TCMR-EN lag_observed 0.6845   0.652       NA
+41    blocks    TwoStage-EN lag_observed 0.6361   0.764   0.7526
+42 irregular    TwoStage-EN lag_observed 0.5320   0.979   0.0453
+43    smooth    TwoStage-EN lag_observed 0.6011   0.839       NA
+44    blocks       DSCMR-EN       plugin 0.3333   2.009   1.0000
+45    global       DSCMR-EN       plugin 0.1694   2.857       NA
+46 irregular       DSCMR-EN       plugin 0.1975   2.234   0.2251
+47    smooth       DSCMR-EN       plugin 0.1928   2.309       NA
+48    blocks  DSCMR-EN-phi1       plugin 0.3305   2.025   0.9956
+49 irregular  DSCMR-EN-phi1       plugin 0.1746   2.305   0.1151
+50    smooth  DSCMR-EN-phi1       plugin 0.1776   2.357       NA
+51    blocks      Global-EN       plugin 0.1586   2.204       NA
+52    global      Global-EN       plugin 0.1694   2.857       NA
+53 irregular      Global-EN       plugin 0.1620   2.177       NA
+54    smooth      Global-EN       plugin 0.0862   2.375       NA
+55    blocks          GW-EN       plugin 0.2850   2.087       NA
+56    global          GW-EN       plugin 0.1650   2.958       NA
+57 irregular          GW-EN       plugin 0.1621   2.252       NA
+58    smooth          GW-EN       plugin 0.2137   2.299       NA
+59    blocks        TCMR-EN       plugin 0.3489   1.988       NA
+60 irregular        TCMR-EN       plugin 0.3358   1.942       NA
+61    blocks    TwoStage-EN       plugin 0.2615   2.137   0.7526
+62 irregular    TwoStage-EN       plugin 0.1525   2.345   0.0453
+63    smooth    TwoStage-EN       plugin 0.1857   2.324       NA
+
+== Selected G ==
+PLIC_AIC 
+           
+             1  2  3  4  5
+  blocks     0  0 10  0  0
+  global    10  0  0  0  0
+  irregular  2  5  2  0  1
+  smooth     0  0  0  7  3
+PLIC_BIC 
+           
+             1  2  3
+  blocks     6  2  2
+  global    10  0  0
+  irregular 10  0  0
+  smooth     6  4  0
+SCR_AIC_eff 
+           
+             1  2  3  4  5
+  blocks     0  0 10  0  0
+  global    10  0  0  0  0
+  irregular  1  5  2  0  2
+  smooth     0  0  0  7  3
+
+DSCMR-EN monotone in every dataset: TRUE 

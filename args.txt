@@ -1,0 +1,1 @@
+reps=10 n_units=150 n_time=12 patterns=irregular,blocks,global,smooth cores=4
