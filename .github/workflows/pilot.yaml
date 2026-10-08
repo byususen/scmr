@@ -1,0 +1,48 @@
+name: dynamic-pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      args:
+        description: 'Arguments for inst/simulation/dynamic/pilot.R'
+        required: false
+        default: 'reps=3 n_units=150 n_time=24 patterns=irregular,blocks,global cores=4'
+      tag:
+        description: 'Name of the results branch suffix'
+        required: false
+        default: 'pilot'
+
+permissions:
+  contents: write
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: local::.
+          needs: check
+      - name: Run pilot
+        run: |
+          mkdir -p "$RUNNER_TEMP/pilot_out"
+          Rscript inst/simulation/dynamic/pilot.R ${{ github.event.inputs.args }} out="$RUNNER_TEMP/pilot_out" 2>&1 | tee "$RUNNER_TEMP/pilot_out/log.txt"
+      - name: Publish results to branch ci-logs/<tag>
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/pilot_out"
+          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID} args: ${{ github.event.inputs.args }}" > RUN.txt
+          git init -q
+          git checkout -q -b logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Pilot ${GITHUB_RUN_ID}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/${{ github.event.inputs.tag }}

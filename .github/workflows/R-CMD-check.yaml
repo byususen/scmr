@@ -1,11 +1,14 @@
 on:
   push:
-    branches: ['**']
+    branches: ['**', '!ci-logs/**']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
 name: R-CMD-check
+
+permissions:
+  contents: write
 
 jobs:
   R-CMD-check:
@@ -31,16 +34,32 @@ jobs:
           extra-packages: any::rcmdcheck, any::roxygen2
           needs: check
       - name: Regenerate documentation
-        run: Rscript -e 'roxygen2::roxygenise()'
-      - name: Upload regenerated docs
-        if: matrix.config.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: roxygen-docs
-          path: |
-            man
-            NAMESPACE
+        run: Rscript -e 'roxygen2::roxygenise()' > roxygen.log 2>&1 || (cat roxygen.log; exit 1)
+        shell: bash
       - uses: r-lib/actions/check-r-package@v2
         with:
-          upload-snapshots: true
+          upload-snapshots: false
           error-on: '"error"'
+      - name: Publish logs and regenerated docs to branch ci-logs/<os>
+        if: always()
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          out="$RUNNER_TEMP/ci-out"
+          mkdir -p "$out"
+          cp roxygen.log "$out/" 2>/dev/null || true
+          cp -r man NAMESPACE "$out/" 2>/dev/null || true
+          if [ -d check ]; then
+            find check -name '00check.log' -exec cp {} "$out/" \;
+            find check -name '00install.out' -exec cp {} "$out/" \;
+            find check -name '*.Rout.fail' -exec cp {} "$out/" \;
+            find check -name 'testthat.Rout*' -exec cp {} "$out/" \;
+          fi
+          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID}" > "$out/RUN.txt"
+          cd "$out"
+          git init -q
+          git checkout -q -b logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "CI logs ${GITHUB_RUN_ID}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/${{ matrix.config.os }}
