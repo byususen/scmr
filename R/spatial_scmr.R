@@ -136,8 +136,11 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       sweep <- membership_sweep(fits, data, unit_groups, units, w, control,
                                 scmr_seed(seed, 100000 + iter + 7919L * (start_id - 1L)))
       unit_groups <- sweep$groups
-      tiny <- sweep$changes > 0 && (sweep$changes <= control$tiny_movement_max_units ||
-                                     sweep$changes / length(units) <= control$tiny_movement_rate_tol)
+      # The monotone (sum-scale) algorithm stops only at zero changes or max_iter;
+      # the legacy tiny-movement rule (and its revert) would break monotonicity.
+      tiny <- !sum_scale && sweep$changes > 0 &&
+        (sweep$changes <= control$tiny_movement_max_units ||
+           sweep$changes / length(units) <= control$tiny_movement_rate_tol)
       reverted <- tiny && control$tiny_movement_revert
       if (reverted) unit_groups <- old
       groups <- unit_groups[unit_num]
