@@ -42,14 +42,17 @@ predict_multinom_prob <- function(fit, newx, s = NULL) {
   } else {
     get_s_value(fit, s)
   }
-  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "response")
+  # Linear predictors and a max-shifted softmax: glmnet's "response" can
+  # overflow to NaN for large linear predictors (extrapolated local fits).
+  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link")
   if (length(dim(arr)) == 3) {
-    prob <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
+    link <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
                    ncol = dim(arr)[2], dimnames = dimnames(arr)[1:2])
   } else {
-    prob <- arr
+    link <- as.matrix(arr)
   }
-  prob <- as.matrix(prob)
+  prob <- softmax_rows(link)
+  dimnames(prob) <- dimnames(link)
   if (is.null(colnames(prob))) {
     cls <- NULL
     if (!is.null(fit$classnames)) cls <- fit$classnames

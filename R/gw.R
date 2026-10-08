@@ -7,7 +7,7 @@
 
 gw_bisquare <- function(d, h) ifelse(d < h, (1 - (d / h)^2)^2, 0)
 
-gw_fit_anchors <- function(z, y, rows, ucoords, anchor_idx, k, alpha, lambda, classes,
+gw_fit_anchors <- function(z, xraw, y, rows, ucoords, anchor_idx, k, alpha, lambda, classes,
                            type_multinomial, pre, control) {
   m <- nrow(ucoords)
   lapply(anchor_idx, function(a) {
@@ -35,6 +35,9 @@ gw_fit_anchors <- function(z, y, rows, ucoords, anchor_idx, k, alpha, lambda, cl
     eng$standardize <- FALSE
     eng$pre <- pre
     eng$bandwidth_units <- kk
+    # Discard numerically failed local fits (non-finite probabilities).
+    p <- tryCatch(engine_predict(eng, xraw[ii, , drop = FALSE]), error = function(e) NULL)
+    if (is.null(p) || any(!is.finite(p))) return(NULL)
     eng
   })
 }
@@ -81,7 +84,7 @@ fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 20
       sub_rows <- rows[fit_u]
       sub_anchor <- pick_anchors(seq_along(fit_u))
       for (j in seq_along(k_grid)) {
-        engines <- gw_fit_anchors(z, data$y, sub_rows, ucoords[fit_u, , drop = FALSE], sub_anchor,
+        engines <- gw_fit_anchors(z, data$x, data$y, sub_rows, ucoords[fit_u, , drop = FALSE], sub_anchor,
                                   k_grid[j], alpha, lambda, classes, type_multinomial, pre, control)
         ok <- !vapply(engines, is.null, logical(1))
         if (!any(ok)) next
@@ -102,7 +105,7 @@ fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 20
       k_best <- k_grid
     }
     anchor_idx <- pick_anchors(seq_len(m))
-    engines <- gw_fit_anchors(z, data$y, rows, ucoords, anchor_idx, k_best, alpha, lambda,
+    engines <- gw_fit_anchors(z, data$x, data$y, rows, ucoords, anchor_idx, k_best, alpha, lambda,
                               classes, type_multinomial, pre, control)
   })
   ok <- !vapply(engines, is.null, logical(1))
