@@ -55,11 +55,12 @@ article_grid <- function(cfg) {
   grid$Heterogeneity[!grepl("^clustered", grid$Scenario)] <- 1
   grid <- unique(grid)
   grid$P <- grid$NActive + grid$NInactive
-  grid$Seed <- with(grid, cfg$seed + Repeat * 1000000 + round(Eta * 1000) + P * 100 +
-    NActive * 10000 + round(Heterogeneity * 100000) +
-    ifelse(Scenario == "smooth", 5000000, ifelse(Scenario == "clustered_balanced", 7000000,
-    ifelse(Scenario == "clustered_imbalanced", 9000000, ifelse(Scenario == "clustered_irregular", 11000000, 0)))) +
-    ifelse(ClassBalance == "imbalanced", 13000000, 0))
+  # Seed = cfg$seed + a hash of every setting that defines the dataset. The old
+  # additive formula (Repeat * 1e6 + scenario offset) collided once there were
+  # more than two repeats (e.g. smooth repeat 3 = clustered_balanced repeat 1).
+  keys <- with(grid, paste(Repeat, Scenario, Eta, ClassBalance, NActive, NInactive, Heterogeneity, sep = "|"))
+  hashes <- vapply(keys, function(k) article_hash(k), character(1), USE.NAMES = FALSE)
+  grid$Seed <- cfg$seed + strtoi(substr(hashes, 1L, 7L), 16L)
   if (any(grid$Seed > .Machine$integer.max - 10000)) stop("Study seed grid exceeds R's seed range.")
   # Detect, rather than silently permit, collisions in the source script's seed formula.
   if (anyDuplicated(grid$Seed)) stop("Study settings produce duplicate seeds; use separate configurations.")
