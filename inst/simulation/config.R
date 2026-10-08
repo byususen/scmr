@@ -15,7 +15,8 @@ article_config <- function(profile = c("smoke", "pilot", "main"), output_dir = "
     # coefficient-space initialization). Both are evaluated over the full G grid.
     extra_models = character(), ms_control = list(lambda_scale = "sum", n_starts = 3L,
       tiny_movement_max_units = 0, tiny_movement_rate_tol = 0, tiny_movement_revert = FALSE,
-      max_iter = 30L))
+      max_iter = 30L, lambda_1se_tol = 0, coef_init_k = 80L, coef_init_anchors = 2000L,
+      coef_init_alpha = 0.1, coef_init_lambda = 0.0625))
   if (profile == "pilot") {
     cfg$n_obs <- 600L; cfg$n_new <- 60L; cfg$n_repeats <- 2L; cfg$G <- c(1L, 3L, 6L)
   }
@@ -95,7 +96,14 @@ article_models <- function(scenario, cfg) {
 # Fitting controls for each study model; extra models modify the article control.
 article_run_control <- function(cfg, model) {
   ctrl <- cfg$fit_control
-  if (identical(model, "TwoStage-EN")) ctrl$update_memberships <- FALSE
-  if (identical(model, "SCMR-EN-MS")) ctrl[names(cfg$ms_control)] <- cfg$ms_control
+  # TwoStage-EN shares the penalty settings of SCMR-EN-MS, so the two differ only
+  # in whether memberships are updated (and in the extra starts).
+  if (model %in% c("TwoStage-EN", "SCMR-EN-MS")) ctrl[names(cfg$ms_control)] <- cfg$ms_control
+  if (identical(model, "TwoStage-EN")) {
+    ctrl$update_memberships <- FALSE
+    ctrl$n_starts <- 1L
+    ctrl$init_method <- "kmeans"
+    ctrl$start_methods <- NULL
+  }
   do.call(scmr::scmr_control, ctrl)
 }

@@ -51,9 +51,11 @@ article_summarize <- function(out, expected, cfg) {
   criteria <- c(SCR_BIC_original = "CriterionSCR_BIC_original", SCR_BIC_effective = "CriterionSCR_BIC_effective",
     SCR_AIC_effective = "CriterionSCR_AIC_effective", CB_BIC = "CriterionCB_BIC", CB_AIC = "CriterionCB_AIC",
     PLIC_BIC = "CriterionPLIC_BIC", PLIC_AIC = "CriterionPLIC_AIC")
-  criteria <- criteria[unname(criteria) %in% names(valid)]
+  # Older result sets may lack the PLIC columns; an empty table keeps every rule.
+  if (nrow(valid)) criteria <- criteria[unname(criteria) %in% names(valid)]
   # SCMR-EN-MS shares the G = 1 global fit with SCMR-EN.
-  selection_models <- intersect(c("SCMR-EN", "SCMR-EN-MS", "TwoStage-EN"), unique(valid$Model))
+  # SCMR-EN reports are always written (empty when nothing is eligible yet).
+  selection_models <- union("SCMR-EN", intersect(c("SCMR-EN-MS", "TwoStage-EN"), unique(valid$Model)))
   for (sel_model in selection_models) {
   candidate <- if (nrow(valid)) valid[valid$Model %in% c(sel_model, if (sel_model != "SCMR-EN") "SCMR-EN") &
                                       (valid$Model == sel_model | valid$G == 1L), , drop = FALSE] else valid
