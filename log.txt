@@ -1,0 +1,139 @@
+Options:
+List of 12
+ $ reps      : int 3
+ $ n_units   : int 150
+ $ n_time    : int 24
+ $ patterns  : chr "irregular,blocks,global"
+ $ G         : int 3
+ $ delta     : num 1
+ $ out       : chr "/home/runner/work/_temp/pilot_out"
+ $ cores     : int 4
+ $ theory    : logi TRUE
+ $ G_grid    : chr "1,2,3,4,5"
+ $ p_active  : int 5
+ $ p_inactive: int 10
+
+== Oracle misassignment rate by T and phi ==
+     Pattern  T Phi Misassigned
+1     blocks  1 0.0 0.415555556
+2  irregular  1 0.0 0.380000000
+3     blocks  2 0.0 0.240000000
+4  irregular  2 0.0 0.280000000
+5     blocks  4 0.0 0.122222222
+6  irregular  4 0.0 0.115555556
+7     blocks  8 0.0 0.033333333
+8  irregular  8 0.0 0.046666667
+9     blocks 12 0.0 0.002222222
+10 irregular 12 0.0 0.020000000
+11    blocks 24 0.0 0.000000000
+12 irregular 24 0.0 0.000000000
+13    blocks  1 0.5 0.026666667
+14 irregular  1 0.5 0.093333333
+15    blocks  2 0.5 0.022222222
+16 irregular  2 0.5 0.055555556
+17    blocks  4 0.5 0.004444444
+18 irregular  4 0.5 0.026666667
+19    blocks  8 0.5 0.002222222
+20 irregular  8 0.5 0.013333333
+21    blocks 12 0.5 0.000000000
+22 irregular 12 0.5 0.011111111
+23    blocks 24 0.5 0.000000000
+24 irregular 24 0.5 0.000000000
+25    blocks  1 1.0 0.022222222
+26 irregular  1 1.0 0.100000000
+27    blocks  2 1.0 0.015555556
+28 irregular  2 1.0 0.068888889
+29    blocks  4 1.0 0.002222222
+30 irregular  4 1.0 0.028888889
+31    blocks  8 1.0 0.000000000
+32 irregular  8 1.0 0.015555556
+33    blocks 12 1.0 0.000000000
+34 irregular 12 1.0 0.011111111
+35    blocks 24 1.0 0.000000000
+36 irregular 24 1.0 0.000000000
+37    blocks  1 2.0 0.026666667
+38 irregular  1 2.0 0.108888889
+39    blocks  2 2.0 0.017777778
+40 irregular  2 2.0 0.086666667
+41    blocks  4 2.0 0.004444444
+42 irregular  4 2.0 0.055555556
+43    blocks  8 2.0 0.000000000
+44 irregular  8 2.0 0.026666667
+45    blocks 12 2.0 0.000000000
+46 irregular 12 2.0 0.015555556
+47    blocks 24 2.0 0.000000000
+48 irregular 24 2.0 0.000000000
+
+Elapsed: 3.081236 mins 
+
+== Mean metrics at new locations ==
+     Pattern          Model         Mode Kappa LogLoss TrainARI
+1     blocks       DSCMR-EN       filter 0.436   1.162   1.0000
+2     global       DSCMR-EN       filter 0.201   1.554       NA
+3  irregular       DSCMR-EN       filter 0.346   1.319   0.9912
+4     blocks  DSCMR-EN-phi1       filter 0.436   1.162   1.0000
+5  irregular  DSCMR-EN-phi1       filter 0.323   1.398   0.8058
+6     blocks      Global-EN       filter 0.236   1.531       NA
+7     global      Global-EN       filter 0.201   1.554       NA
+8  irregular      Global-EN       filter 0.206   1.545       NA
+9     blocks          GW-EN       filter 0.379   1.268       NA
+10    global          GW-EN       filter 0.192   1.569       NA
+11 irregular          GW-EN       filter 0.299   1.452       NA
+12    blocks        TCMR-EN       filter 0.445   1.140       NA
+13 irregular        TCMR-EN       filter 0.383   1.232       NA
+14    blocks    TwoStage-EN       filter 0.357   1.306   0.6860
+15 irregular    TwoStage-EN       filter 0.229   1.537   0.0569
+16    blocks       DSCMR-EN lag_observed 0.719   0.583   1.0000
+17    global       DSCMR-EN lag_observed 0.642   0.686       NA
+18 irregular       DSCMR-EN lag_observed 0.661   0.715   0.9912
+19    blocks  DSCMR-EN-phi1 lag_observed 0.716   0.583   1.0000
+20 irregular  DSCMR-EN-phi1 lag_observed 0.631   0.789   0.8058
+21    blocks      Global-EN lag_observed 0.569   0.888       NA
+22    global      Global-EN lag_observed 0.642   0.686       NA
+23 irregular      Global-EN lag_observed 0.518   0.973       NA
+24    blocks          GW-EN lag_observed 0.678   0.658       NA
+25    global          GW-EN lag_observed 0.645   0.697       NA
+26 irregular          GW-EN lag_observed 0.583   0.876       NA
+27    blocks SCMR-EN-static lag_observed 0.307   1.371   0.9918
+28 irregular SCMR-EN-static lag_observed 0.256   1.459   1.0000
+29    blocks        TCMR-EN lag_observed 0.725   0.561       NA
+30 irregular        TCMR-EN lag_observed 0.711   0.637       NA
+31    blocks    TwoStage-EN lag_observed 0.666   0.690   0.6860
+32 irregular    TwoStage-EN lag_observed 0.527   0.961   0.0569
+33    blocks       DSCMR-EN       plugin 0.356   2.029   1.0000
+34    global       DSCMR-EN       plugin 0.175   2.963       NA
+35 irregular       DSCMR-EN       plugin 0.260   2.264   0.9912
+36    blocks  DSCMR-EN-phi1       plugin 0.354   2.039   1.0000
+37 irregular  DSCMR-EN-phi1       plugin 0.213   2.393   0.8058
+38    blocks      Global-EN       plugin 0.151   2.351       NA
+39    global      Global-EN       plugin 0.175   2.963       NA
+40 irregular      Global-EN       plugin 0.123   2.269       NA
+41    blocks          GW-EN       plugin 0.312   2.062       NA
+42    global          GW-EN       plugin 0.166   3.126       NA
+43 irregular          GW-EN       plugin 0.192   2.474       NA
+44    blocks        TCMR-EN       plugin 0.362   2.045       NA
+45 irregular        TCMR-EN       plugin 0.307   2.202       NA
+46    blocks    TwoStage-EN       plugin 0.275   2.189   0.6860
+47 irregular    TwoStage-EN       plugin 0.128   2.342   0.0569
+
+== Selected G ==
+PLIC_AIC 
+           
+            1 3
+  blocks    0 3
+  global    3 0
+  irregular 0 3
+PLIC_BIC 
+           
+            1 3
+  blocks    0 3
+  global    3 0
+  irregular 0 3
+SCR_AIC_eff 
+           
+            1 3
+  blocks    0 3
+  global    3 0
+  irregular 0 3
+
+DSCMR-EN monotone in every dataset: TRUE 
