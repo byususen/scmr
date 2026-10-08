@@ -1,7 +1,7 @@
 # scmr 0.4.0 (development; not yet checked with R CMD check)
 
-- Monotone algorithm: `scmr_control(lambda_scale = "sum")` fixes the cluster
-  penalty strengths lambda_g * n_g after initial tuning, standardizes predictors
+- Monotone algorithm: `scmr_control(lambda_scale = "sum")` fixes one common
+  sum-scale penalty strength kappa = mean(lambda) * n / G, standardizes predictors
   once globally and skips tuning inside the alternation. Every membership move
   and every refit then increases the penalized Potts objective, which is
   recorded per iteration as `PenalizedObjective`.

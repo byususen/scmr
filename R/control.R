@@ -35,10 +35,11 @@
 #' @param multinom_maxnwts Maximum weights for the unpenalized multinomial engine.
 #' @param selection_tol Absolute native-coefficient support threshold.
 #' @param lambda_scale `"mean"` (glmnet scale, tuned during iterations; legacy)
-#'   or `"sum"`. With `"sum"`, cluster penalties lambda_g * n_g are fixed after
-#'   initial tuning, predictors are standardized once globally, and no tuning
-#'   happens inside the alternation, so the penalized Potts objective is
-#'   non-decreasing (monotone algorithm).
+#'   or `"sum"`. With `"sum"`, one sum-scale penalty strength
+#'   kappa = mean(lambda) * n / G, tuned on the first initial partition, is used
+#'   for every cluster and start; predictors are standardized once globally and
+#'   no tuning happens inside the alternation, so the penalized Potts objective
+#'   is non-decreasing (monotone algorithm) and comparable across starts.
 #' @param update_memberships If `FALSE`, keep the initial partition (two-stage
 #'   benchmark: spatial clustering followed by local elastic-net fits).
 #' @param n_starts Number of initial partitions; the fit with the largest
