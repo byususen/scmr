@@ -23,6 +23,12 @@ Dynamic spatially clustered multinomial regression (DSCMR-EN).
   multinomial elastic net), `scmr_block_folds()` (whole-block CV folds within
   strata), `simulate_scmr_panel()` (panel Markov generator with global, block,
   irregular and smooth patterns on supplied or random coordinates).
+- `fit_scr_original()`: multinomial port of the reference SCR algorithm
+  (unpenalized local models, simultaneous label updates, fixed phi, k-means
+  start, original BIC) as a benchmark.
+- `simulate_scmr_panel()` gains the SCR domain (`domain = "scr"`), rectangular
+  `"grid"` regimes (SCR scenario 1), Gaussian-process smooth coefficients
+  (`smooth_type = "gp"`, SCR scenario 2) and returns the true unit slopes.
 - Iteration diagnostics record `Phi` and `LabelTerm`.
 - Fixed-lambda local fits use a warm-start path ending at the requested lambda
   and retry with longer paths when glmnet stops early or fails (nearly

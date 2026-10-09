@@ -133,3 +133,24 @@ test_that("panel generator, block folds and GW comparator behave", {
   expect_equal(rowSums(p), rep(1, 20), tolerance = 1e-10, ignore_attr = TRUE)
   expect_true(gw$k %in% c(20, 40))
 })
+
+test_that("original SCR port runs, predicts and reports its BIC", {
+  d <- dyn_fixture(C = 3, n_units = 60, n_time = 4, pattern = "blocks", G = 2)
+  f <- fit_scr_original(d$xx, d$y, d$unit_id, d$coords, G = 2, kmeans_starts = 5, maxitr = 20)
+  expect_true(isTRUE(f$scr_original))
+  expect_lte(f$G, 2L)
+  expect_true(is.finite(f$criteria$CriterionSCR_BIC_original))
+  expect_identical(f$penalty, "none")
+  p <- scmr_filter_predict(f, d$xx, d$unit_id, d$time, d$coords, d$lag_cols)
+  expect_equal(rowSums(p), rep(1, nrow(d$xx)), tolerance = 1e-10)
+})
+
+test_that("panel generator supports the SCR domain, grid regions and GP smooth fields", {
+  g <- simulate_scmr_panel(n_units = 120, n_time = 2, pattern = "grid", domain = "scr", seed = 4)
+  expect_equal(length(g$beta), 6L)
+  expect_true(all(g$unit_coords[, 1]^2 + 0.5 * g$unit_coords[, 2]^2 > 0.25))
+  s <- simulate_scmr_panel(n_units = 80, n_time = 2, pattern = "smooth", smooth_type = "gp", seed = 4)
+  expect_equal(dim(s$unit_beta), c(80L, 5L, 6L))
+  expect_equal(apply(s$unit_beta, c(1, 2), sum), matrix(0, 80, 5), tolerance = 1e-10)
+  expect_gt(stats::sd(s$unit_beta[, 1, 1]), 0)
+})

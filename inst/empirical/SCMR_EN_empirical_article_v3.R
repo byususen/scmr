@@ -16,7 +16,8 @@
 #                 with carry-forward of the last observed phase.
 # Models: Global-EN, DSCMR-EN (estimated phi), DSCMR-EN-phi1 (ablation),
 #         TwoStage-EN, SCMR-EN-static (no previous phase), GW-EN (optional),
-#         LightGBM (optional, if the lightgbm package is installed).
+#         LightGBM (optional, if the lightgbm package is installed),
+#         SCR-original (benchmark port of Sugasawa & Murakami's reference code).
 # Resume-safe: one RDS per (design, fold, model, G) under output_dir/runs.
 # Settings can be overridden with environment variables SCMR_SYNTAX_DIR,
 # SCMR_DATA_FILE, SCMR_OUTPUT_DIR and SCMR_PROFILE ("pilot", "main", "ci").
@@ -39,6 +40,9 @@ use_gw <- TRUE                   # geographically weighted comparator (slow on f
 if (nzchar(Sys.getenv("SCMR_DESIGNS"))) designs_to_run <- strsplit(Sys.getenv("SCMR_DESIGNS"), ",")[[1]]
 if (nzchar(Sys.getenv("SCMR_USE_GW"))) use_gw <- as.logical(Sys.getenv("SCMR_USE_GW"))
 use_lightgbm <- requireNamespace("lightgbm", quietly = TRUE)
+use_scr_original <- TRUE         # benchmark: original SCR algorithm (unpenalized; may be slow)
+scr_maxitr <- 30L
+if (nzchar(Sys.getenv("SCMR_USE_SCR"))) use_scr_original <- as.logical(Sys.getenv("SCMR_USE_SCR"))
 
 profiles <- list(
   ci    = list(folds = 1L, G_grid = c(1L, 2L), n_starts = 2L, max_iter = 10L, gw_anchors = 30L,
@@ -280,6 +284,11 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   } else if (model == "GW-EN") {
     fit_gw_multinom_en(Xtr, ytr, dat$id_subsegmen[tr_rows], coords_all[tr_rows, ], k_grid = prof$gw_k,
                        alpha = alp, lambda = lam, anchors = prof$gw_anchors, seed = seed)
+  } else if (model == "SCR-original") {
+    # Benchmark: multinomial port of the reference SCR code (unpenalized,
+    # simultaneous updates, phi = 1, k-means start, 5 nearest neighbours).
+    fit_scr_original(Xtr, ytr, dat$id_subsegmen[tr_rows], coords_all[tr_rows, ], G = G, phi = 1,
+                     k_neighbors = 5, maxitr = scr_maxitr, seed = seed)
   } else if (G == 1L && !static) {
     global
   } else {
@@ -468,6 +477,7 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
     }
     if (use_gw) do.call(safe_run, c(list(design, fold, "GW-EN", 0L), args))
     if (use_lightgbm) do.call(safe_run, c(list(design, fold, "LightGBM", 0L), args))
+    if (use_scr_original) for (G in setdiff(G_grid, 1L)) do.call(safe_run, c(list(design, fold, "SCR-original", G), args))
   }
   if (design == "E1_nowcast" && use_lightgbm) do.call(safe_run, c(list(design, fold, "LightGBM", 0L), args))
 }

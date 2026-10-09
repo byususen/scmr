@@ -19,7 +19,8 @@ suppressPackageStartupMessages(library(scmr))
 
 opt <- list(reps = 3L, n_units = 150L, n_time = 24L, patterns = "irregular,blocks,global",
             G = 3L, delta = 1, out = "dynamic_pilot", cores = 1L, theory = TRUE,
-            G_grid = "1,2,3,4,5", p_active = 5L, p_inactive = 10L, coef_k = 30L, n_starts = 3L)
+            G_grid = "1,2,3,4,5", p_active = 5L, p_inactive = 10L, coef_k = 30L, n_starts = 3L,
+            domain = "square", smooth_type = "linear", scr = TRUE, membership = "potts")
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
   if (length(kv) == 2L && kv[1] %in% names(opt)) opt[[kv[1]]] <- utils::type.convert(kv[2], as.is = TRUE)
@@ -73,11 +74,37 @@ generic_plugin <- function(prob_fun, x, unit, time, lagc, start_class) {
   out
 }
 
+# Mean squared error of the unit-level active slopes (centred over classes)
+# at the training units, the main accuracy measure of the SCR paper.
+unit_beta_mse <- function(f, sim, train_units) {
+  pa <- opt$p_active
+  feats <- paste0("x", seq_len(pa))
+  ui <- match(train_units, unique(sim$unit_id))
+  truth <- sim$unit_beta[ui, , , drop = FALSE]
+  est <- array(0, dim(truth))
+  if (inherits(f, "scmr_gw")) {
+    uc <- sim$unit_coords[ui, , drop = FALSE]
+    near <- apply(uc, 1L, function(s) which.min(colSums((t(f$anchor_coords) - s)^2)))
+    for (a in unique(near)) {
+      cf <- scmr:::engine_coef(f$engines[[a]], "sum_to_zero")
+      est[near == a, , ] <- rep(t(cf[, feats, drop = FALSE]), each = sum(near == a))
+    }
+  } else {
+    cf <- coef(f, "sum_to_zero")
+    grp <- if (f$G == 1L) rep(1L, length(train_units)) else as.integer(f$group_unit[train_units])
+    for (g in unique(grp)) {
+      est[grp == g, , ] <- rep(t(cf[g, , feats, drop = TRUE]), each = sum(grp == g))
+    }
+  }
+  mean((est - truth)^2)
+}
+
 run_dataset <- function(pattern, rep) {
-  seed <- 1000L * rep + match(pattern, c("irregular", "blocks", "global", "smooth"))
+  seed <- 1000L * rep + match(pattern, c("irregular", "blocks", "global", "smooth", "grid"))
   sim <- simulate_scmr_panel(n_units = opt$n_units, n_time = opt$n_time, pattern = pattern,
                              G = opt$G, p_active = opt$p_active, p_inactive = opt$p_inactive,
-                             delta = opt$delta, seed = seed)
+                             delta = opt$delta, seed = seed, domain = opt$domain,
+                             smooth_type = opt$smooth_type)
   classes <- levels(sim$y)
   lagc <- colnames(sim$lag_x)
   X <- cbind(sim$x, sim$lag_x)
@@ -86,7 +113,7 @@ run_dataset <- function(pattern, rep) {
   new_units <- sample(units, round(0.2 * length(units)))
   tr <- !sim$unit_id %in% new_units
   nw <- !tr
-  Gt <- if (pattern == "global") 1L else if (pattern == "smooth") opt$G else opt$G
+  Gt <- if (pattern == "global") 1L else if (pattern == "smooth") opt$G else length(sim$beta)
   base <- list(lambda_scale = "sum", type_multinomial = "ungrouped", min_units = 8, min_per_class = 3,
                max_iter = 30L, n_starts = as.integer(opt$n_starts), coef_init_k = as.integer(opt$coef_k), coef_init_anchors = 200L,
                coef_init_alpha = 0.1, coef_init_lambda = 0.0625, k_neighbors = 8,
@@ -111,8 +138,20 @@ run_dataset <- function(pattern, rep) {
                SCR_AIC_eff = f$criteria$CriterionSCR_AIC_effective, Phi = f$phi %||% NA_real_, Error = "")
   }))
   sel$Pattern <- pattern; sel$Rep <- rep; sel$TrueG <- if (pattern == "smooth") NA else Gt
-  main <- grid_fits[[match(Gt, G_grid)]]
+  main <- if (Gt %in% G_grid) grid_fits[[match(Gt, G_grid)]] else tryCatch(fitG(Gt, phi_update = "pl"), error = function(e) e)
+  # Original SCR (unpenalized, simultaneous updates, phi = 1, k-means start):
+  # G chosen by its own BIC over the same grid, and also fitted at the true G.
+  scr_fit <- function(G) tryCatch(fit_scr_original(X[tr, ], sim$y[tr], sim$unit_id[tr], sim$coords[tr, ], G = G,
+                                                   phi = 1, k_neighbors = 5, seed = seed), error = function(e) e)
+  if (isTRUE(opt$scr)) {
+    scr_grid <- lapply(G_grid, scr_fit)
+    sel$SCR_orig_BIC <- vapply(scr_grid, function(f) if (inherits(f, "error")) NA_real_ else f$criteria$CriterionSCR_BIC_original, numeric(1))
+    sel$SCR_orig_Geff <- vapply(scr_grid, function(f) if (inherits(f, "error")) NA_real_ else f$G, numeric(1))
+  }
   models <- list(`DSCMR-EN` = main, `Global-EN` = glob)
+  if (isTRUE(opt$scr)) {
+    models$`SCR-original` <- if (Gt %in% G_grid) scr_grid[[match(Gt, G_grid)]] else scr_fit(Gt)
+  }
   if (Gt > 1L) {
     models$`DSCMR-EN-phi1` <- tryCatch(fitG(Gt, phi_update = "fixed", phi = 1), error = function(e) e)
     models$`TwoStage-EN` <- tryCatch(fitG(Gt, update_memberships = FALSE, n_starts = 1L, init_method = "kmeans"), error = function(e) e)
@@ -139,16 +178,17 @@ run_dataset <- function(pattern, rep) {
     is_gw <- inherits(f, "scmr_gw")
     prob_fun <- if (is_gw) function(x) predict(f, x, cn) else if (f$model == "fixed_clusters") {
       function(x) predict(f, x, cluster = sim$regime[nw])
-    } else if (static) function(x) predict(f, x[, colnames(sim$x)], new_unit_id = un, new_coords = cn, membership = "potts")
-    else function(x) predict(f, x, new_unit_id = un, new_coords = cn, membership = "potts")
+    } else if (static) function(x) predict(f, x[, colnames(sim$x)], new_unit_id = un, new_coords = cn, membership = opt$membership)
+    else function(x) predict(f, x, new_unit_id = un, new_coords = cn, membership = opt$membership)
     preds <- list(lag_observed = prob_fun(xn))
     if (!static) {
       preds$filter <- if (!is_gw && f$model %in% c("scmr", "global")) {
-        scmr_filter_predict(f, xn, un, tn, cn, lagc, membership = "potts")
+        scmr_filter_predict(f, xn, un, tn, cn, lagc, membership = opt$membership)
       } else generic_filter(prob_fun, xn, un, tn, lagc, a0)
       preds$plugin <- generic_plugin(prob_fun, xn, un, tn, lagc, start_class)
     }
-    train_ari <- if (!is_gw && f$model == "scmr" && f$G > 1L && pattern %in% c("irregular", "blocks")) {
+    beta_mse <- tryCatch(unit_beta_mse(f, sim, units[!units %in% new_units]), error = function(e) NA_real_)
+    train_ari <- if (!is_gw && f$model == "scmr" && f$G > 1L && pattern %in% c("irregular", "blocks", "grid")) {
       ari(sim$unit_regime[match(f$unit_levels, units)], f$group_unit)
     } else NA_real_
     if (nm == "DSCMR-EN" && !is.null(f$diagnostics$iterations$PenalizedObjective)) {
@@ -158,11 +198,11 @@ run_dataset <- function(pattern, rep) {
     for (md in names(preds)) {
       m <- metrics(yn, preds[[md]], classes)
       rows[[length(rows) + 1L]] <- cbind(data.frame(Model = nm, Mode = md, Error = ""), m,
-        data.frame(TrainARI = train_ari, Phi = if (!is_gw) f$phi %||% NA_real_ else NA_real_,
+        data.frame(TrainARI = train_ari, BetaMSE = beta_mse, Phi = if (!is_gw) f$phi %||% NA_real_ else NA_real_,
                    G = if (is_gw) NA_integer_ else f$G))
     }
   }
-  res <- do.call(rbind, lapply(rows, function(r) { for (c in setdiff(c("Accuracy", "Kappa", "LogLoss", "BrierScore", "MacroF1", "TrainARI", "Phi", "G"), names(r))) r[[c]] <- NA; r }))
+  res <- do.call(rbind, lapply(rows, function(r) { for (c in setdiff(c("Accuracy", "Kappa", "LogLoss", "BrierScore", "MacroF1", "TrainARI", "BetaMSE", "Phi", "G"), names(r))) r[[c]] <- NA; r }))
   res$Pattern <- pattern; res$Rep <- rep; res$Seed <- seed; res$FitSeconds <- fit_seconds
   res$MonotoneDSCMR <- monotone
   list(results = res, selection = sel)
@@ -217,12 +257,12 @@ if (isTRUE(opt$theory)) {
 cat("\nElapsed:", format(Sys.time() - t_start), "\n")
 ok <- results[results$Mode != "error" & !is.na(results$Kappa), ]
 cat("\n== Mean metrics at new locations ==\n")
-print(stats::aggregate(cbind(Kappa, LogLoss, TrainARI) ~ Pattern + Model + Mode, ok, mean, na.action = na.pass), digits = 3)
+print(stats::aggregate(cbind(Kappa, LogLoss, TrainARI, BetaMSE) ~ Pattern + Model + Mode, ok, mean, na.action = na.pass), digits = 3)
 err <- results[results$Mode == "error", ]
 if (nrow(err)) { cat("\n== Errors ==\n"); print(err[, c("Pattern", "Rep", "Model", "Error")]) }
 if (nrow(selection)) {
   cat("\n== Selected G ==\n")
-  for (crit in c("PLIC_AIC", "PLIC_BIC", "SCR_AIC_eff")) {
+  for (crit in intersect(c("PLIC_AIC", "PLIC_BIC", "SCR_AIC_eff", "SCR_orig_BIC"), names(selection))) {
     best <- do.call(rbind, lapply(split(selection, list(selection$Pattern, selection$Rep), drop = TRUE), function(d) {
       d <- d[is.finite(d[[crit]]), ]; if (!nrow(d)) return(NULL)
       data.frame(Pattern = d$Pattern[1], Rep = d$Rep[1], Selected = d$G[which.min(d[[crit]])], TrueG = d$TrueG[1])
