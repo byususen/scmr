@@ -1,0 +1,159 @@
+Options:
+List of 18
+ $ reps       : int 10
+ $ n_units    : int 150
+ $ n_time     : int 24
+ $ patterns   : chr "grid,irregular,smooth,global"
+ $ G          : int 3
+ $ delta      : num 1
+ $ out        : chr "/home/runner/work/_temp/pilot_out"
+ $ cores      : int 4
+ $ theory     : logi TRUE
+ $ G_grid     : chr "1,2,3,4,5,6,7,8"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ domain     : chr "scr"
+ $ smooth_type: chr "gp"
+ $ scr        : logi TRUE
+ $ membership : chr "potts"
+
+== Oracle misassignment rate by T and phi ==
+     Pattern  T Phi Misassigned
+1  irregular  1 0.0 0.412666667
+2  irregular  2 0.0 0.286000000
+3  irregular  4 0.0 0.134000000
+4  irregular  8 0.0 0.048000000
+5  irregular 12 0.0 0.018666667
+6  irregular 24 0.0 0.002666667
+7  irregular  1 0.5 0.084666667
+8  irregular  2 0.5 0.063333333
+9  irregular  4 0.5 0.031333333
+10 irregular  8 0.5 0.018000000
+11 irregular 12 0.5 0.008666667
+12 irregular 24 0.5 0.001333333
+13 irregular  1 1.0 0.091333333
+14 irregular  2 1.0 0.068666667
+15 irregular  4 1.0 0.034666667
+16 irregular  8 1.0 0.016000000
+17 irregular 12 1.0 0.008666667
+18 irregular 24 1.0 0.000000000
+19 irregular  1 2.0 0.098666667
+20 irregular  2 2.0 0.080666667
+21 irregular  4 2.0 0.053333333
+22 irregular  8 2.0 0.023333333
+23 irregular 12 2.0 0.015333333
+24 irregular 24 2.0 0.002666667
+
+Elapsed: 31.52622 mins 
+
+== Mean metrics at new locations ==
+     Pattern          Model         Mode Kappa LogLoss TrainARI  BetaMSE
+1     global       DSCMR-EN       filter 0.238   1.502       NA   0.0117
+2       grid       DSCMR-EN       filter 0.385   1.264   0.9928   0.1063
+3  irregular       DSCMR-EN       filter 0.368   1.280   1.0000   0.0742
+4     smooth       DSCMR-EN       filter 0.305   1.412       NA   0.3583
+5       grid  DSCMR-EN-phi1       filter 0.387   1.263   0.9934   0.1071
+6  irregular  DSCMR-EN-phi1       filter 0.369   1.287   0.9956   0.0769
+7     smooth  DSCMR-EN-phi1       filter 0.308   1.411       NA   0.3567
+8     global      Global-EN       filter 0.238   1.502       NA   0.0117
+9       grid      Global-EN       filter 0.192   1.607       NA   0.8251
+10 irregular      Global-EN       filter 0.220   1.553       NA   0.7143
+11    smooth      Global-EN       filter 0.279   1.459       NA   0.4954
+12    global          GW-EN       filter 0.240   1.512       NA   0.0163
+13      grid          GW-EN       filter 0.341   1.363       NA   0.3164
+14 irregular          GW-EN       filter 0.303   1.434       NA   0.4405
+15    smooth          GW-EN       filter 0.336   1.360       NA   0.2793
+16    global   SCR-original       filter 0.233   1.508       NA   0.0107
+17      grid   SCR-original       filter 0.353   1.416   0.7902 126.2788
+18 irregular   SCR-original       filter 0.355   1.328   0.8475   0.1457
+19    smooth   SCR-original       filter 0.307   1.432       NA   0.3139
+20      grid        TCMR-EN       filter 0.410   1.208       NA   0.1037
+21 irregular        TCMR-EN       filter 0.424   1.184       NA   0.0742
+22      grid    TwoStage-EN       filter 0.345   1.345   0.6606   0.3357
+23 irregular    TwoStage-EN       filter 0.226   1.552   0.0752   0.6689
+24    smooth    TwoStage-EN       filter 0.319   1.414       NA   0.3699
+25    global       DSCMR-EN lag_observed 0.653   0.676       NA   0.0117
+26      grid       DSCMR-EN lag_observed 0.657   0.712   0.9928   0.1063
+27 irregular       DSCMR-EN lag_observed 0.665   0.694   1.0000   0.0742
+28    smooth       DSCMR-EN lag_observed 0.610   0.809       NA   0.3583
+29      grid  DSCMR-EN-phi1 lag_observed 0.658   0.711   0.9934   0.1071
+30 irregular  DSCMR-EN-phi1 lag_observed 0.664   0.701   0.9956   0.0769
+31    smooth  DSCMR-EN-phi1 lag_observed 0.608   0.809       NA   0.3567
+32    global      Global-EN lag_observed 0.653   0.676       NA   0.0117
+33      grid      Global-EN lag_observed 0.499   1.043       NA   0.8251
+34 irregular      Global-EN lag_observed 0.533   0.940       NA   0.7143
+35    smooth      Global-EN lag_observed 0.585   0.860       NA   0.4954
+36    global          GW-EN lag_observed 0.647   0.686       NA   0.0163
+37      grid          GW-EN lag_observed 0.621   0.813       NA   0.3164
+38 irregular          GW-EN lag_observed 0.591   0.846       NA   0.4405
+39    smooth          GW-EN lag_observed 0.627   0.768       NA   0.2793
+40      grid SCMR-EN-static lag_observed 0.266   1.486   0.9568   0.4003
+41 irregular SCMR-EN-static lag_observed 0.248   1.486   0.9151   0.3936
+42    smooth SCMR-EN-static lag_observed 0.229   1.524       NA   0.5607
+43    global   SCR-original lag_observed 0.652   0.693       NA   0.0107
+44      grid   SCR-original lag_observed 0.623   0.873   0.7902 126.2788
+45 irregular   SCR-original lag_observed 0.647   0.772   0.8475   0.1457
+46    smooth   SCR-original lag_observed 0.607   0.840       NA   0.3139
+47      grid        TCMR-EN lag_observed 0.684   0.666       NA   0.1037
+48 irregular        TCMR-EN lag_observed 0.713   0.609       NA   0.0742
+49      grid    TwoStage-EN lag_observed 0.625   0.798   0.6606   0.3357
+50 irregular    TwoStage-EN lag_observed 0.536   0.941   0.0752   0.6689
+51    smooth    TwoStage-EN lag_observed 0.604   0.815       NA   0.3699
+52    global       DSCMR-EN       plugin 0.164   2.882       NA   0.0117
+53      grid       DSCMR-EN       plugin 0.309   2.140   0.9928   0.1063
+54 irregular       DSCMR-EN       plugin 0.307   2.104   1.0000   0.0742
+55    smooth       DSCMR-EN       plugin 0.221   2.277       NA   0.3583
+56      grid  DSCMR-EN-phi1       plugin 0.305   2.164   0.9934   0.1071
+57 irregular  DSCMR-EN-phi1       plugin 0.308   2.138   0.9956   0.0769
+58    smooth  DSCMR-EN-phi1       plugin 0.212   2.307       NA   0.3567
+59    global      Global-EN       plugin 0.164   2.882       NA   0.0117
+60      grid      Global-EN       plugin 0.116   2.297       NA   0.8251
+61 irregular      Global-EN       plugin 0.133   2.326       NA   0.7143
+62    smooth      Global-EN       plugin 0.181   2.249       NA   0.4954
+63    global          GW-EN       plugin 0.155   2.964       NA   0.0163
+64      grid          GW-EN       plugin 0.279   2.214       NA   0.3164
+65 irregular          GW-EN       plugin 0.220   2.265       NA   0.4405
+66    smooth          GW-EN       plugin 0.233   2.263       NA   0.2793
+67    global   SCR-original       plugin 0.161   3.572       NA   0.0107
+68      grid   SCR-original       plugin 0.301   2.747   0.7902 126.2788
+69 irregular   SCR-original       plugin 0.292   2.738   0.8475   0.1457
+70    smooth   SCR-original       plugin 0.227   2.616       NA   0.3139
+71      grid        TCMR-EN       plugin 0.343   2.099       NA   0.1037
+72 irregular        TCMR-EN       plugin 0.345   2.061       NA   0.0742
+73      grid    TwoStage-EN       plugin 0.277   2.192   0.6606   0.3357
+74 irregular    TwoStage-EN       plugin 0.160   2.309   0.0752   0.6689
+75    smooth    TwoStage-EN       plugin 0.197   2.334       NA   0.3699
+
+== Selected G ==
+PLIC_AIC 
+           
+             1  3  4  5  6
+  global    10  0  0  0  0
+  grid       0  0  0  0 10
+  irregular  0 10  0  0  0
+  smooth     0  1  5  2  2
+PLIC_BIC 
+           
+             1  2  3  4
+  global    10  0  0  0
+  grid       4  1  3  2
+  irregular  0  1  9  0
+  smooth    10  0  0  0
+SCR_AIC_eff 
+           
+             1  3  4  5  6
+  global    10  0  0  0  0
+  grid       0  0  0  0 10
+  irregular  0 10  0  0  0
+  smooth     0  0  6  2  2
+SCR_orig_BIC 
+           
+             1  2  3
+  global    10  0  0
+  grid       9  1  0
+  irregular  0  2  8
+  smooth    10  0  0
+
+DSCMR-EN monotone in every dataset: TRUE 
