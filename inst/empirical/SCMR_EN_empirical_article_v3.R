@@ -44,7 +44,7 @@ profiles <- list(
   # Local coefficient initialisation over about one segment (k = 12 units) with
   # six starts: in the panel pilot this raised the ARI of irregular regimes at
   # T = 12 from 0.23 to 0.78.
-  pilot = list(folds = 1L, G_grid = c(1L, 3L, 6L), n_starts = 6L, max_iter = 30L, gw_anchors = 300L,
+  pilot = list(folds = 1L, G_grid = c(1L, 3L, 6L), n_starts = 3L, max_iter = 20L, gw_anchors = 300L,
                gw_k = c(50, 100, 200), coef_k = 12L, coef_anchors = 600L, E3_G = 3L),
   main  = list(folds = 1:5, G_grid = 1:8, n_starts = 6L, max_iter = 30L, gw_anchors = 300L,
                gw_k = c(50, 100, 200, 400), coef_k = 12L, coef_anchors = 600L, E3_G = NA))
@@ -69,6 +69,12 @@ alpha_grid <- c(0.5, 0.9)
 min_units <- 10L
 min_per_class <- 5L
 k_neighbors <- 8L                # 3 x 3 sub-segments of a segment plus nearest segments
+# Penalty of the local (clustered and GW) models: the global CV "lambda.1se".
+# On the KSA data lambda.min is tiny (about 4e-5): the previous phase nearly
+# separates the classes inside clusters, glmnet then converges very slowly and
+# the clustered fits take hours. Global-EN itself still uses lambda.min.
+local_lambda_rule <- "lambda.1se"
+show_progress <- TRUE            # print every membership iteration
 
 # =============================================================================
 # 1. PACKAGES
@@ -179,7 +185,7 @@ base_control <- list(type_multinomial = "ungrouped", alpha_grid = alpha_grid, mi
                      lambda_rule = "lambda.min", lambda_scale = "sum", max_iter = prof$max_iter,
                      tiny_movement_max_units = 0, tiny_movement_rate_tol = 0, tiny_movement_revert = FALSE,
                      coef_init_k = prof$coef_k, coef_init_anchors = prof$coef_anchors,
-                     coef_init_alpha = 0.1, coef_init_lambda = 0.0625)
+                     coef_init_alpha = 0.1, coef_init_lambda = 0.0625, verbose = show_progress)
 control_for <- function(model) {
   extra <- switch(model,
     "Global-EN" = list(),
@@ -330,6 +336,9 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   invisible(bundle)
 }
 safe_run <- function(design, fold, model, G, ...) {
+  if (!file.exists(run_file(design, fold, model, G))) {
+    cat(sprintf("  [%s] start %s G=%d\n", format(Sys.time(), "%H:%M"), model, G))
+  }
   calls <- NULL
   tryCatch(withCallingHandlers(run_model(design, fold, model, G, ...), error = function(e) {
     calls <<- vapply(sys.calls(), function(cl) paste(deparse(cl, nlines = 1L), collapse = ""), character(1))
@@ -353,15 +362,32 @@ global_fit <- function(train, seed) {
 run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = NULL) {
   seed <- outer_seed + 100L * fold + match(design, designs_to_run)
   banner(design, " | fold ", fold, " | train rows ", length(train), " | test rows ", length(test))
-  global <- global_fit(train, seed)
-  lam <- global$lambda_used[1]; alp <- global$alpha
-  cat("  Global-EN alpha", alp, "lambda", signif(lam, 3), "\n")
+  # The global fit and the local coefficient features are cached per split, so
+  # a rerun after an interruption does not repeat them.
+  cache_dir <- file.path(output_dir, "cache")
+  dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+  gfile <- file.path(cache_dir, sprintf("%s_fold%02d_global.rds", design, fold))
+  if (file.exists(gfile)) global <- readRDS(gfile) else {
+    cat(sprintf("  [%s] global cross-validation\n", format(Sys.time(), "%H:%M")))
+    global <- global_fit(train, seed)
+    saveRDS(global, gfile)
+  }
+  alp <- global$alpha
+  cvfit <- global$fits[[1]]$fit
+  lam <- if (inherits(cvfit, "cv.glmnet")) cvfit[[local_lambda_rule]] else global$lambda_used[1]
+  cat("  Global-EN alpha", alp, "| lambda.min", signif(global$lambda_used[1], 3),
+      "| local models use", local_lambda_rule, signif(lam, 3), "\n")
   features <- NULL
   if (any(G_grid > 1L)) {
-    Xtr <- X_full[train, global$x_colnames, drop = FALSE]
-    features <- scmr_local_coefficients(Xtr, droplevels(dat$phase[train]), dat$id_subsegmen[train],
-                                        coords_all[train, ], k = prof$coef_k, alpha = 0.1, lambda = 0.0625,
-                                        anchors = prof$coef_anchors, type_multinomial = "ungrouped", seed = seed)
+    ffile <- file.path(cache_dir, sprintf("%s_fold%02d_features.rds", design, fold))
+    if (file.exists(ffile)) features <- readRDS(ffile) else {
+      cat(sprintf("  [%s] local coefficient features\n", format(Sys.time(), "%H:%M")))
+      Xtr <- X_full[train, global$x_colnames, drop = FALSE]
+      features <- scmr_local_coefficients(Xtr, droplevels(dat$phase[train]), dat$id_subsegmen[train],
+                                          coords_all[train, ], k = prof$coef_k, alpha = 0.1, lambda = 0.0625,
+                                          anchors = prof$coef_anchors, type_multinomial = "ungrouped", seed = seed)
+      saveRDS(features, ffile)
+    }
   }
   args <- list(train = train, test = test, seed = seed, global = global, lam = lam, alp = alp,
                features = features, modes = modes, y_obs_impute = y_obs_impute)
