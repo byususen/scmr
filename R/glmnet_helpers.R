@@ -103,16 +103,28 @@ fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
       weights = weights %||% rep(1, nrow(x))), error = function(e) e)
     if (inherits(fit, "error")) return(fit)
     if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
-      return(simpleError("The glmnet path did not reach the requested lambda; inspect solver limits."))
+      err <- simpleError("The glmnet path did not reach the requested lambda; inspect solver limits.")
+      err$fit <- fit
+      return(err)
     }
     fit
   }
   fit <- attempt(4L, 100)
   if (inherits(fit, "error")) fit <- attempt(25L, 1000)
   if (inherits(fit, "error")) fit <- attempt(60L, 1e4)
-  if (inherits(fit, "error")) stop(conditionMessage(fit), call. = FALSE)
-  fit$fixed_lambda <- lambda
-  fit$selected_lambda <- lambda
+  used <- lambda
+  if (inherits(fit, "error")) {
+    # Last resort: the smallest lambda glmnet reached (a slightly stronger
+    # penalty), reported through the fit and a warning.
+    if (is.null(fit$fit) || !length(fit$fit$lambda)) stop(conditionMessage(fit), call. = FALSE)
+    partial <- fit$fit
+    used <- min(partial$lambda)
+    warning(sprintf("glmnet stopped before lambda = %.3g; using lambda = %.3g.", lambda, used), call. = FALSE)
+    fit <- partial
+  }
+  fit$fixed_lambda <- used
+  fit$selected_lambda <- used
+  fit$requested_lambda <- lambda
   fit
 }
 

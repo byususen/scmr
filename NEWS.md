@@ -26,7 +26,9 @@ Dynamic spatially clustered multinomial regression (DSCMR-EN).
 - Iteration diagnostics record `Phi` and `LabelTerm`.
 - Fixed-lambda local fits use a warm-start path ending at the requested lambda
   and retry with longer paths when glmnet stops early or fails (nearly
-  separable clusters with strong lag-state predictors).
+  separable clusters with strong lag-state predictors); if glmnet still stops
+  early, the smallest lambda it reached is used with a warning and recorded in
+  the engine.
 
 # scmr 0.4.0
 

@@ -27,7 +27,9 @@
 # =============================================================================
 syntax_dir <- Sys.getenv("SCMR_SYNTAX_DIR", "C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax")
 data_file <- Sys.getenv("SCMR_DATA_FILE", file.path(syntax_dir, "df_month_rec_final.csv"))
-output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v3"))
+output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v3b"))
+# Cached global fits and features of an earlier run are reused when present.
+reuse_cache_dir <- file.path(dirname(syntax_dir), "Results", "Real data v3", "cache")
 run_profile <- Sys.getenv("SCMR_PROFILE", "pilot")   # "pilot" first, then "main"
 
 designs_to_run <- c("E2_mapping", "E1_nowcast", "E3_imputation")
@@ -74,6 +76,14 @@ k_neighbors <- 8L                # 3 x 3 sub-segments of a segment plus nearest 
 # separates the classes inside clusters, glmnet then converges very slowly and
 # the clustered fits take hours. Global-EN itself still uses lambda.min.
 local_lambda_rule <- "lambda.1se"
+# The local penalty is lambda.1se times a multiplier, and the cluster weights of
+# new locations follow a membership rule; both are chosen by an inner
+# validation on whole training segments (filter log-loss of a two-stage fit),
+# before any test data are touched. The first pilot showed near-separation
+# inside clusters (the previous phase is very predictive) at lambda.1se.
+tune_multipliers <- c(1, 4, 16, 64)
+tune_rules <- c("proportion", "potts")
+tune_G <- 3L
 show_progress <- TRUE            # print every membership iteration
 
 # =============================================================================
@@ -284,7 +294,7 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
     if (inherits(fit, "lgb.Booster")) return(predict_lightgbm(fit, x))
     if (inherits(fit, "scmr_gw")) return(predict(fit, x, te_xy[idx, , drop = FALSE]))
     if (fit$model == "global") return(predict(fit, x))
-    predict(fit, x, new_unit_id = te_unit[idx], new_coords = te_xy[idx, , drop = FALSE], membership = "potts")
+    predict(fit, x, new_unit_id = te_unit[idx], new_coords = te_xy[idx, , drop = FALSE], membership = new_membership)
   }
   a0 <- as.numeric(table(ytr)) / length(ytr)
   preds <- list()
@@ -297,12 +307,12 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
     }
     if ("filter" %in% modes) {
       preds$filter <- if (inherits(fit, c("scmr_fit"))) {
-        scmr_filter_predict(fit, Xte, te_unit, te_time, te_xy, lag_cols, membership = "potts")
+        scmr_filter_predict(fit, Xte, te_unit, te_time, te_xy, lag_cols, membership = new_membership)
       } else generic_filter(prob_fun, Xte, te_unit, te_time, a0)
     }
     if ("plugin" %in% modes) preds$plugin <- plugin_predict(prob_fun, Xte, te_unit, te_time, which.max(a0))
     if ("impute" %in% modes) {
-      preds$impute <- scmr_impute_waves(fit, Xte, y_obs_impute, te_unit, te_time, te_xy, lag_cols, membership = "potts")
+      preds$impute <- scmr_impute_waves(fit, Xte, y_obs_impute, te_unit, te_time, te_xy, lag_cols, membership = new_membership)
     }
   }
   results <- list(); classes <- list(); rowpred <- list()
@@ -359,6 +369,52 @@ global_fit <- function(train, seed) {
            nfolds = 5L, lambda_rule = "lambda.min", seed = seed)
 }
 
+new_membership <- "proportion"
+# Inner validation: one fold of whole training segments is held out; a
+# two-stage fit (G = tune_G) on the rest is scored by the forward-filter
+# log-loss on the held-out segments for every multiplier and membership rule.
+tune_local <- function(design, fold, train, lam_base, alp, seed, cache_dir) {
+  tfile <- file.path(cache_dir, sprintf("%s_fold%02d_tuning.rds", design, fold))
+  if (file.exists(tfile)) {
+    tuned <- readRDS(tfile)
+    print(tuned$table, row.names = FALSE, digits = 4)
+    return(tuned)
+  }
+  cat(sprintf("  [%s] inner validation of the local penalty and membership rule\n", format(Sys.time(), "%H:%M")))
+  inner <- scmr_block_folds(dat$id_segmen[train], dat$regency[train], nfolds = 5, seed = seed + 17L)
+  fit_rows <- train[inner != 1L]
+  val_units <- unique(dat$id_subsegmen[train[inner == 1L]])
+  val_rows <- which(dat$id_subsegmen %in% val_units)
+  Xfit <- X_full[fit_rows, , drop = FALSE]
+  kc <- keep_cols(Xfit); kc[lag_cols] <- TRUE
+  cols <- colnames(X_full)[kc]
+  yfit <- droplevels(dat$phase[fit_rows])
+  tab <- data.frame()
+  for (m in tune_multipliers) {
+    t0 <- proc.time()[["elapsed"]]
+    fit <- tryCatch(fit_scmr(Xfit[, cols, drop = FALSE], yfit, G = tune_G, unit_id = dat$id_subsegmen[fit_rows],
+                             coords = coords_all[fit_rows, ], alpha = alp, lambda = lam_base * m,
+                             control = utils::modifyList(control_for("TwoStage-EN"), list(verbose = FALSE)),
+                             seed = seed), error = function(e) e)
+    if (inherits(fit, "error")) { cat("    multiplier", m, "failed:", conditionMessage(fit), "\n"); next }
+    for (rule in tune_rules) {
+      p <- scmr_filter_predict(fit, X_lagfill[val_rows, cols, drop = FALSE], dat$id_subsegmen[val_rows],
+                               dat$time[val_rows], coords_all[val_rows, , drop = FALSE], lag_cols, membership = rule)
+      mb <- metric_block(dat$phase[val_rows], p, "")
+      tab <- rbind(tab, data.frame(Multiplier = m, Lambda = lam_base * m, Rule = rule,
+                                   FilterLogLoss = mb$LogLoss, FilterKappa = mb$Kappa,
+                                   TrainPenalizedObjective = fit$criteria$PenalizedObjective,
+                                   Minutes = (proc.time()[["elapsed"]] - t0) / 60))
+    }
+  }
+  if (!nrow(tab)) stop("Inner validation failed for every multiplier.")
+  best <- tab[which.min(tab$FilterLogLoss), ]
+  tuned <- list(multiplier = best$Multiplier, rule = as.character(best$Rule), table = tab)
+  print(tab, row.names = FALSE, digits = 4)
+  saveRDS(tuned, tfile)
+  tuned
+}
+
 run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = NULL) {
   seed <- outer_seed + 100L * fold + match(design, designs_to_run)
   banner(design, " | fold ", fold, " | train rows ", length(train), " | test rows ", length(test))
@@ -367,6 +423,10 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
   cache_dir <- file.path(output_dir, "cache")
   dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
   gfile <- file.path(cache_dir, sprintf("%s_fold%02d_global.rds", design, fold))
+  old_g <- file.path(reuse_cache_dir, basename(gfile))
+  if (!file.exists(gfile) && file.exists(old_g)) file.copy(old_g, gfile)
+  old_f <- file.path(reuse_cache_dir, sprintf("%s_fold%02d_features.rds", design, fold))
+  if (file.exists(old_f)) file.copy(old_f, file.path(cache_dir, basename(old_f)))
   if (file.exists(gfile)) global <- readRDS(gfile) else {
     cat(sprintf("  [%s] global cross-validation\n", format(Sys.time(), "%H:%M")))
     global <- global_fit(train, seed)
@@ -374,9 +434,14 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
   }
   alp <- global$alpha
   cvfit <- global$fits[[1]]$fit
-  lam <- if (inherits(cvfit, "cv.glmnet")) cvfit[[local_lambda_rule]] else global$lambda_used[1]
+  lam_base <- if (inherits(cvfit, "cv.glmnet")) cvfit[[local_lambda_rule]] else global$lambda_used[1]
+  tuned <- if (any(G_grid > 1L) || use_gw) tune_local(design, fold, train, lam_base, alp, seed, cache_dir) else
+    list(multiplier = 1, rule = "proportion")
+  lam <- lam_base * tuned$multiplier
+  new_membership <<- tuned$rule
   cat("  Global-EN alpha", alp, "| lambda.min", signif(global$lambda_used[1], 3),
-      "| local models use", local_lambda_rule, signif(lam, 3), "\n")
+      "| local lambda", signif(lam, 3), "(", local_lambda_rule, "x", tuned$multiplier, ")",
+      "| new-location membership", new_membership, "\n")
   features <- NULL
   if (any(G_grid > 1L)) {
     ffile <- file.path(cache_dir, sprintf("%s_fold%02d_features.rds", design, fold))

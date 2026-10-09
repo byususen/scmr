@@ -87,7 +87,7 @@ fit_local_engine <- function(x, y, penalty, alpha, lambda, control, pre = NULL) 
       fit_fixed_lambda_glmnet(z, y, alpha, lambda, classes,
                              standardize, control$type_multinomial,
                              maxit = control$glmnet_maxit), warning = capture_warning)
-    engine <- engine_from_glmnet(raw, x, classes, alpha, lambda, control, warnings)
+    engine <- engine_from_glmnet(raw, x, classes, alpha, raw$fixed_lambda %||% lambda, control, warnings)
     engine$standardize <- standardize
     engine$pre <- pre
     if (standardize) engine$x_sd <- make_pre_transform(z)$scale
