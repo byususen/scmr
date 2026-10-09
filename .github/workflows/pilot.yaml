@@ -72,7 +72,7 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd "$RUNNER_TEMP/emp_out"
-          rm -rf runs
+          rm -rf runs cache
           echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID}" > RUN.txt
           git init -q
           git checkout -q -b logs
