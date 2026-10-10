@@ -1,0 +1,69 @@
+Options:
+List of 23
+ $ exp        : chr "S1"
+ $ spec       : chr "static"
+ $ pattern    : chr "grid"
+ $ reps       : int 25
+ $ rep_start  : int 26
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 150
+ $ n_time     : int 12
+ $ block_size : int 1
+ $ G          : int 3
+ $ delta      : num 1
+ $ G_grid     : chr "1,2,3,4,5,6,7,8"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi TRUE
+ $ gw         : logi TRUE
+ $ unit_labels: logi FALSE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+               Model Kappa LogLoss UnitARI  BetaMSE   Phi    G Seconds
+1          Global-EN 0.233    1.51      NA    0.791    NA 1.00   2.475
+2              GW-EN 0.430    1.21      NA    0.484    NA   NA   6.797
+3            SCMR-EN 0.474    1.13   0.961    0.329 0.960 6.20   8.952
+4       SCMR-EN-phi1 0.469    1.14   0.948    0.340 1.000 6.00   7.554
+5      SCMR-EN@trueG 0.474    1.13   0.953    0.337 0.961 6.00   8.754
+6       SCR-original 0.246    1.50      NA    0.720 1.000 1.16   0.458
+7 SCR-original@trueG 0.410    1.33   0.746 3980.470 1.000 6.00   0.853
+8   TCMR-EN (oracle) 0.515    1.05      NA    0.321 1.000 6.00   0.702
+9        TwoStage-EN 0.393    1.27   0.583    0.538 1.000 6.00   0.936
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Errors ==
+      Rep            Model
+1.95   36 TCMR-EN (oracle)
+1.113  38 TCMR-EN (oracle)
+                                                       Error
+1.95  Fixed clusters do not satisfy min_units/min_per_class.
+1.113 Fixed clusters do not satisfy min_units/min_per_class.
+
+== Selected G (true G = 6 ) ==
+  PLIC_AIC     
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  0  0 21  3  1 
+  PLIC_BIC     
+ 1  2  3  4  5  6  7  8 
+ 0  3 11  7  2  2  0  0 
+  SCR_AIC_eff  
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  0  0 21  3  1 
+  SCR_BIC_eff  
+ 1  2  3  4  5  6  7  8 
+ 0  3 10  7  3  2  0  0 
+  CB_BIC       
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  1  3 19  2  0 
+  SCR_BIC_orig 
+ 1  2  3  4  5  6  7  8 
+22  2  1  0  0  0  0  0 
+
+Elapsed: 9.074559 mins 
