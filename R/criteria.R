@@ -6,6 +6,21 @@ spatial_bonus <- function(w, groups) {
   sum(entries$x[groups[entries$i] == groups[entries$j]]) / 2
 }
 
+# Besag pseudo-log-likelihood of unit labels under the Potts prior used by SCMR:
+#   sum_r [ phi * S_r(g_r) - log sum_h exp(phi * S_r(h)) ],
+#   S_r(h) = sum_q w_rq I(g_q = h).
+# Zero for one cluster or without spatial weights. Used by the PLIC criteria
+# (cf. Stanford and Raftery, 2002; Forbes and Peyrard, 2003).
+potts_log_pseudolikelihood <- function(w, groups, phi, G = max(groups)) {
+  if (is.null(w) || G <= 1L) return(0)
+  groups <- as.integer(groups)
+  onehot <- matrix(0, length(groups), G)
+  onehot[cbind(seq_along(groups), groups)] <- 1
+  a <- phi * as.matrix(w %*% onehot)
+  amax <- apply(a, 1L, max)
+  sum(a[cbind(seq_along(groups), groups)] - amax - log(rowSums(exp(a - amax))))
+}
+
 scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
                               w = NULL, group_unit = NULL) {
   g_total <- length(fits)
@@ -50,10 +65,14 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
   cb_fit <- sum(parts$CBBIC_WeightedNeg2LogLik_c)
   cb_pen <- sum(parts$CBBIC_UnitPenalty_c)
   bonus <- spatial_bonus(w, group_unit)
+  label_pl <- identical(control$phi_update, "pl") && !is.null(group_unit) && g_total > 1L
+  logpl <- if (is.null(group_unit)) 0 else potts_log_pseudolikelihood(w, group_unit, control$phi, g_total)
+  label_value <- if (label_pl) logpl else control$phi * bonus
   criteria <- list(
     logLik = ll, neg2_logLik = -2 * ll, spatial_bonus = bonus,
-    objective_value = ll + control$phi * bonus,
-    neg2_objective = -2 * (ll + control$phi * bonus),
+    phi = control$phi, phi_estimated = label_pl,
+    objective_value = ll + label_value,
+    neg2_objective = -2 * (ll + label_value),
     n_rows = n, n_units = length(unique(unit_id)), n_predictors = ncol(x),
     df_original_total = df_orig, df_effective_total = df_eff,
     df_nominal_active_total = sum(parts$DFNominalActive_g),
@@ -74,5 +93,20 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
     CriterionCB_AIC = cb_fit + 2 * df_eff,
     cluster_components = parts)
   criteria$CriterionV3_CB_uBIC <- criteria$CriterionCB_BIC
+  # Potts pseudo-likelihood criteria: likelihood + label cost + EDF penalty.
+  # They score the same joint (data, labels) model that the algorithm fits, so
+  # partition complexity enters model selection, unlike the five criteria above.
+  # An estimated phi adds one parameter to the label model.
+  df_label <- if (label_pl) 1 else 0
+  criteria$PottsLogPseudoLik <- logpl
+  criteria$df_label <- df_label
+  criteria$CriterionPLIC_BIC <- -2 * ll - 2 * logpl + log(n) * (df_eff + df_label)
+  criteria$CriterionPLIC_AIC <- -2 * ll - 2 * logpl + 2 * (df_eff + df_label)
+  # Penalized objective actually maximized by the alternating algorithm.
+  lambda_sum <- vapply(seq_len(g_total), function(g) {
+    if (fits[[g]]$kind != "glmnet") return(0)
+    sum(row_group == g) * fits[[g]]$lambda * engine_penalty(fits[[g]])
+  }, numeric(1))
+  criteria$PenalizedObjective <- criteria$objective_value - sum(lambda_sum)
   criteria
 }

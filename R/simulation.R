@@ -23,6 +23,11 @@ scmr_simulation_control <- function(...) {
       stop(nm, " must contain finite numbers.", call. = FALSE)
     }
   }
+  if (length(defaults$irregular_regime_q) != 6L) stop("irregular_regime_q must hold (q1, q2) for three regimes.", call. = FALSE)
+  if (length(defaults$irregular_tiles) != 2L || any(defaults$irregular_tiles < 2) ||
+      any(defaults$irregular_tiles != floor(defaults$irregular_tiles))) {
+    stop("irregular_tiles must contain two integers of at least two.", call. = FALSE)
+  }
   for (nm in c("domain_s1_range", "domain_s2_range", "class_imbalance_shift_range_general",
                "beta_cluster_g1_values", "smooth_psi_intercept")) {
     if (length(defaults[[nm]]) != 2L) stop(nm, " must have length two.", call. = FALSE)
@@ -87,7 +92,10 @@ scmr_simulation_control <- function(...) {
 #' @param p Number of predictors.
 #' @param active Distinct active predictor indices, possibly empty.
 #' @param eta Spatial range scale for predictors.
-#' @param scenario Global, balanced or imbalanced six-region, or smooth coefficients.
+#' @param scenario Global, balanced or imbalanced six-region, smooth coefficients,
+#'   or `"clustered_irregular"`: three coefficient regimes laid out as a Latin
+#'   square on a grid of tiles, so every regime is spatially disconnected and
+#'   cannot be recovered by clustering coordinates.
 #' @param class_levels Three distinct response labels. Model fitting itself allows
 #'   any number of classes greater than one.
 #' @param seed Random seed. The caller's random state is restored.
@@ -105,7 +113,8 @@ scmr_simulation_control <- function(...) {
 #' @export
 simulate_scmr_data <- function(n_obs = 3000, n_new = 300, p = 25, active = 1:5,
                                eta = 0.2,
-                               scenario = c("global", "clustered_balanced", "clustered_imbalanced", "smooth"),
+                               scenario = c("global", "clustered_balanced", "clustered_imbalanced", "smooth",
+                                            "clustered_irregular"),
                                class_levels = c("C1", "C2", "C3"), seed = 1000,
                                class_balance = c("balanced", "imbalanced"),
                                heterogeneity_strength = 1, control = scmr_simulation_control()) {

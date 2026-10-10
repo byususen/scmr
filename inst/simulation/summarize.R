@@ -49,8 +49,18 @@ article_summarize <- function(out, expected, cfg) {
     }
   }
   criteria <- c(SCR_BIC_original = "CriterionSCR_BIC_original", SCR_BIC_effective = "CriterionSCR_BIC_effective",
-    SCR_AIC_effective = "CriterionSCR_AIC_effective", CB_BIC = "CriterionCB_BIC", CB_AIC = "CriterionCB_AIC")
-  candidate <- if (nrow(valid)) valid[valid$Model == "SCMR-EN", , drop = FALSE] else valid
+    SCR_AIC_effective = "CriterionSCR_AIC_effective", CB_BIC = "CriterionCB_BIC", CB_AIC = "CriterionCB_AIC",
+    PLIC_BIC = "CriterionPLIC_BIC", PLIC_AIC = "CriterionPLIC_AIC")
+  # Older result sets may lack the PLIC columns; an empty table keeps every rule.
+  if (nrow(valid)) criteria <- criteria[unname(criteria) %in% names(valid)]
+  # SCMR-EN-MS shares the G = 1 global fit with SCMR-EN.
+  # SCMR-EN reports are always written (empty when nothing is eligible yet).
+  selection_models <- union("SCMR-EN", intersect(c("SCMR-EN-MS", "TwoStage-EN"), unique(valid$Model)))
+  for (sel_model in selection_models) {
+  candidate <- if (nrow(valid)) valid[valid$Model %in% c(sel_model, if (sel_model != "SCMR-EN") "SCMR-EN") &
+                                      (valid$Model == sel_model | valid$G == 1L), , drop = FALSE] else valid
+  if (nrow(candidate)) candidate$Model[candidate$G == 1L] <- sel_model
+  suffix <- if (sel_model == "SCMR-EN") "" else paste0("_", gsub("-", "", sel_model))
   # Every requested G must have an eligible fit before a replicate can select G.
   # This prevents failed candidates from silently improving selection frequencies.
   for (criterion in names(criteria)) {
@@ -66,8 +76,8 @@ article_summarize <- function(out, expected, cfg) {
       chosen[[length(chosen) + 1L]] <- z[order(z[[criteria[[criterion]]]], z$G)[1], , drop = FALSE]
     }
     best <- article_bind(chosen)
-    article_csv(best, file.path(out, paste0("best_G_", criterion, ".csv")))
-    article_csv(article_summary(best, setdiff(grouping, "G")), file.path(out, paste0("summary_selected_", criterion, ".csv")))
+    article_csv(best, file.path(out, paste0("best_G_", criterion, suffix, ".csv")))
+    article_csv(article_summary(best, setdiff(grouping, "G")), file.path(out, paste0("summary_selected_", criterion, suffix, ".csv")))
     freq <- data.frame()
     if (nrow(best)) {
       keys <- c(setdiff(grouping, c("Model", "Mode", "Penalty")), "G")
@@ -78,8 +88,9 @@ article_summarize <- function(out, expected, cfg) {
       freq <- merge(freq, denominator, by = denom_keys, all.x = TRUE)
       freq$Frequency <- freq$Count / freq$NSelected
     }
-    article_csv(freq, file.path(out, paste0("best_G_frequency_", criterion, ".csv")))
-    article_csv(article_bind(coverage), file.path(out, paste0("selection_coverage_", criterion, ".csv")))
+    article_csv(freq, file.path(out, paste0("best_G_frequency_", criterion, suffix, ".csv")))
+    article_csv(article_bind(coverage), file.path(out, paste0("selection_coverage_", criterion, suffix, ".csv")))
+  }
   }
   if (nrow(result)) {
     audit <- result[, c("RunID", "Model", "G", "Converged", "CBBIC_WeightedN_Check", "n_rows"), drop = FALSE]

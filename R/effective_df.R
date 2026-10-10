@@ -30,7 +30,11 @@ engine_effective_df <- function(engine, x, tol = 1e-8) {
   if (grouped) selected <- matrix(rep(active_predictors, each = k), k, p)
   scale <- rep(1, p)
   z <- x
-  if (engine$standardize) {
+  if (!is.null(engine$pre)) {
+    # Fitted on globally standardized predictors with standardize = FALSE.
+    z <- apply_pre_transform(x, engine$pre)
+    scale <- engine$pre$scale
+  } else if (engine$standardize) {
     z <- sweep(x, 2, colMeans(x), "-")
     scale <- sqrt(colMeans(z^2))
     scale[scale <= 1e-12] <- 1

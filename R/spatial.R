@@ -125,9 +125,12 @@ relabel_clusters <- function(group_unit) {
 initialize_feasible_groups <- function(unit_coords, G, unit_total, unit_class,
                                        min_units, min_class_vec,
                                        tries = 100, seed = NULL,
-                                       method = c("kmeans", "random"),
-                                       initial_cluster = NULL) {
+                                       method = c("kmeans", "random", "coefficient"),
+                                       initial_cluster = NULL, features = NULL) {
   method <- match.arg(method)
+  if (method == "coefficient" && is.null(features)) {
+    stop("Coefficient-space initialization requires local coefficient features.", call. = FALSE)
+  }
   if (!is.null(seed)) set.seed(seed)
   m <- nrow(unit_coords)
 
@@ -160,10 +163,16 @@ initialize_feasible_groups <- function(unit_coords, G, unit_total, unit_class,
 
   coords_scaled <- scale(unit_coords)
   coords_scaled[!is.finite(coords_scaled)] <- 0
+  if (method == "coefficient") {
+    feat_scaled <- scale(features)
+    feat_scaled[!is.finite(feat_scaled)] <- 0
+  }
 
   for (tt in seq_len(tries)) {
     if (method == "kmeans") {
       grp <- stats::kmeans(coords_scaled, centers = G, nstart = 1)$cluster
+    } else if (method == "coefficient") {
+      grp <- stats::kmeans(feat_scaled, centers = G, nstart = 5, iter.max = 50)$cluster
     } else {
       base <- rep(seq_len(G), each = min_units)
       rest <- sample(seq_len(G), size = m - length(base), replace = TRUE)
@@ -188,4 +197,57 @@ move_is_feasible <- function(u, g_new, group_unit, unit_count, class_count,
   if (unit_old_after < min_units) return(FALSE)
   if (any(class_old_after < min_class_vec)) return(FALSE)
   TRUE
+}
+
+#' Local coefficient features for coefficient-space initialization
+#'
+#' Fits a strongly regularized multinomial elastic net in the spatial
+#' neighbourhood of anchor units and returns, for every unit, the centred
+#' (sum-to-zero) coefficient vector of its nearest anchor. Clustering these
+#' vectors gives initial partitions that need not be spatially compact.
+#' @inheritParams fit_scmr
+#' @param k Number of nearest spatial units per local fit; enlarged until every
+#'   class is present.
+#' @param alpha,lambda Elastic-net settings of the local fits (glmnet scale).
+#' @param anchors Maximum number of anchor units.
+#' @param type_multinomial Passed to glmnet.
+#' @return A numeric matrix with one row per sorted unique unit.
+#' @export
+scmr_local_coefficients <- function(x, y, unit_id, coords, k = 50, alpha = 0.2,
+                                    lambda = 0.05, anchors = 300,
+                                    type_multinomial = "ungrouped", seed = 123) {
+  data <- prepare_scmr_data(x, y, unit_id, coords)
+  z <- apply_pre_transform(data$x, make_pre_transform(data$x))
+  ucoords <- get_unit_coords(data$unit_id, data$coords)
+  units <- sort(unique(data$unit_id))
+  rows <- split(seq_len(nrow(z)), factor(data$unit_id, levels = units))
+  m <- length(units)
+  classes <- levels(data$y)
+  anchor_idx <- with_scmr_seed(seed, if (m <= anchors) seq_len(m) else sort(sample.int(m, anchors)))
+  dmat <- as.matrix(stats::dist(ucoords))
+  feats <- matrix(NA_real_, length(anchor_idx), length(classes) * (ncol(z) + 1L))
+  for (a in seq_along(anchor_idx)) {
+    ord <- order(dmat[anchor_idx[a], ])
+    kk <- min(k, m)
+    repeat {
+      ii <- unlist(rows[ord[seq_len(kk)]], use.names = FALSE)
+      if (all(table(factor(data$y[ii], levels = classes)) > 0L) || kk >= m) break
+      kk <- min(2L * kk, m)
+    }
+    fit <- tryCatch(fit_fixed_lambda_glmnet(z[ii, , drop = FALSE], factor(data$y[ii], levels = classes),
+                                           alpha, lambda, classes, FALSE, type_multinomial),
+                    error = function(e) NULL)
+    if (is.null(fit)) next
+    cf <- stats::coef(fit, s = lambda)
+    b <- t(vapply(classes, function(cl) as.numeric(cf[[cl]][c("(Intercept)", colnames(z)), 1]),
+                  numeric(ncol(z) + 1L)))
+    b <- sweep(b, 2, colMeans(b), "-")
+    feats[a, ] <- as.vector(t(b))
+  }
+  ok <- stats::complete.cases(feats)
+  if (!any(ok)) stop("All local fits failed; increase k or lambda.", call. = FALSE)
+  nearest <- apply(dmat[, anchor_idx[ok], drop = FALSE], 1L, which.min)
+  out <- feats[ok, , drop = FALSE][nearest, , drop = FALSE]
+  rownames(out) <- units
+  out
 }

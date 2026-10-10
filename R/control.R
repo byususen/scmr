@@ -6,7 +6,9 @@
 #' @param weight_bandwidth Optional bandwidth for exponential spatial weights.
 #' @param row_standardize_weights If `TRUE`, row-standardize the spatial weight matrix.
 #' @param max_iter Maximum number of SCMR membership-update iterations.
-#' @param init_method Initial spatial partition method, either `"kmeans"` or `"random"`.
+#' @param init_method Initial spatial partition method: `"kmeans"` (coordinates),
+#'   `"random"`, or `"coefficient"` (k-means on local coefficient vectors; see
+#'   [scmr_local_coefficients()]).
 #' @param init_tries Number of random/k-means initialization attempts for feasible clusters.
 #' @param update_order Unit update order in each SCMR iteration, either `"random"` or `"fixed"`.
 #' @param alpha_grid Candidate alpha values used when tuning elastic-net models.
@@ -32,6 +34,35 @@
 #' @param multinom_maxit Maximum iterations for an unpenalized multinomial fit.
 #' @param multinom_maxnwts Maximum weights for the unpenalized multinomial engine.
 #' @param selection_tol Absolute native-coefficient support threshold.
+#' @param lambda_scale `"mean"` (glmnet scale, tuned during iterations; legacy)
+#'   or `"sum"`. With `"sum"`, one sum-scale penalty strength
+#'   kappa = mean(lambda) * n / G, tuned on the first initial partition, is used
+#'   for every cluster and start; predictors are standardized once globally and
+#'   no tuning happens inside the alternation, so the penalized Potts objective
+#'   is non-decreasing (monotone algorithm) and comparable across starts.
+#' @param update_memberships If `FALSE`, keep the initial partition (two-stage
+#'   benchmark: spatial clustering followed by local elastic-net fits).
+#' @param n_starts Number of initial partitions; the fit with the largest
+#'   penalized objective is returned.
+#' @param start_methods Optional character vector of initialization methods for
+#'   the starts, recycled to `n_starts`; defaults to `init_method` then
+#'   alternating `"coefficient"` and `"kmeans"`.
+#' @param coef_init_k Number of nearest spatial units in each local fit used by
+#'   coefficient-space initialization.
+#' @param coef_init_alpha,coef_init_lambda Elastic-net settings of the local fits.
+#' @param coef_init_anchors Maximum number of anchor units at which local fits
+#'   are computed; other units take the features of their nearest anchor.
+#' @param phi_update `"fixed"` keeps `phi` and uses the SCR label term
+#'   phi * (sum of agreeing edge weights); `"pl"` replaces it by the Besag
+#'   pseudo-log-likelihood of the Potts model and estimates phi by maximum
+#'   pseudo-likelihood after every membership sweep (see [scmr_potts_phi()]);
+#'   `phi` is then the starting value.
+#' @param phi_max Upper bound for the estimated phi.
+#' @param penalty_size Sum-scale penalty strength per cluster: `"common"`
+#'   (kappa for every cluster) or `"adaptive"` (kappa * sqrt(n_g / n_bar), less
+#'   shrinkage per observation for small clusters). The change of the penalty
+#'   multiplier is part of the exact membership gain, so the algorithm stays
+#'   monotone.
 #' @param verbose Print iteration progress when true.
 #' @return A named list of control settings.
 #' @export
@@ -42,7 +73,7 @@ scmr_control <- function(
     weight_bandwidth = NULL,
     row_standardize_weights = FALSE,
     max_iter = 10,
-    init_method = c("kmeans", "random"),
+    init_method = c("kmeans", "random", "coefficient"),
     init_tries = 200,
     update_order = c("random", "fixed"),
     alpha_grid = c(0.6, 0.7, 0.8),
@@ -68,9 +99,23 @@ scmr_control <- function(
     multinom_maxit = 1000,
     multinom_maxnwts = 200000,
     selection_tol = 1e-8,
+    lambda_scale = c("mean", "sum"),
+    update_memberships = TRUE,
+    n_starts = 1L,
+    start_methods = NULL,
+    coef_init_k = 50L,
+    coef_init_alpha = 0.2,
+    coef_init_lambda = 0.05,
+    coef_init_anchors = 300L,
+    phi_update = c("fixed", "pl"),
+    phi_max = 20,
+    penalty_size = c("common", "adaptive"),
     verbose = FALSE) {
+  phi_update <- match.arg(phi_update)
+  penalty_size <- match.arg(penalty_size)
   weight_type <- match.arg(weight_type)
   init_method <- match.arg(init_method)
+  lambda_scale <- match.arg(lambda_scale)
   update_order <- match.arg(update_order)
 
   out <- list(
@@ -106,6 +151,17 @@ scmr_control <- function(
     multinom_maxit = multinom_maxit,
     multinom_maxnwts = multinom_maxnwts,
     selection_tol = selection_tol,
+    lambda_scale = lambda_scale,
+    update_memberships = update_memberships,
+    n_starts = n_starts,
+    start_methods = start_methods,
+    coef_init_k = coef_init_k,
+    coef_init_alpha = coef_init_alpha,
+    coef_init_lambda = coef_init_lambda,
+    coef_init_anchors = coef_init_anchors,
+    phi_update = phi_update,
+    phi_max = phi_max,
+    penalty_size = penalty_size,
     verbose = verbose
   )
   validate_scmr_control(out)
@@ -114,24 +170,29 @@ scmr_control <- function(
 
 validate_scmr_control <- function(control) {
   for (nm in c("standardize", "row_standardize_weights", "tune_lambda", "tune_alpha_after_convergence",
-               "tiny_movement_revert", "verbose")) {
+               "tiny_movement_revert", "update_memberships", "verbose")) {
     if (!is.logical(control[[nm]]) || length(control[[nm]]) != 1L || is.na(control[[nm]])) {
       stop(nm, " must be TRUE or FALSE.", call. = FALSE)
     }
   }
-  choices <- list(weight_type = c("binary", "exp"), init_method = c("kmeans", "random"),
+  choices <- list(weight_type = c("binary", "exp"), init_method = c("kmeans", "random", "coefficient"),
     update_order = c("random", "fixed"), lambda_rule = c("lambda.min", "lambda.1se"),
-    type_multinomial = c("grouped", "ungrouped"))
+    type_multinomial = c("grouped", "ungrouped"), phi_update = c("fixed", "pl"),
+    penalty_size = c("common", "adaptive"))
   for (nm in names(choices)) {
     if (length(control[[nm]]) != 1L || !control[[nm]] %in% choices[[nm]]) stop("Invalid ", nm, call. = FALSE)
   }
   integer_fields <- c("k_neighbors", "max_iter", "init_tries", "holdout_nlambda",
-                      "min_units", "glmnet_maxit", "multinom_maxit", "multinom_maxnwts")
+                      "min_units", "glmnet_maxit", "multinom_maxit", "multinom_maxnwts",
+                      "n_starts", "coef_init_k", "coef_init_anchors")
   for (nm in integer_fields) {
     z <- control[[nm]]
     if (length(z) != 1L || !is.finite(z) || z < 1 || z != floor(z)) {
       stop(nm, " must be a positive integer.", call. = FALSE)
     }
+  }
+  if (length(control$phi_max) != 1L || !is.finite(control$phi_max) || control$phi_max <= 0) {
+    stop("phi_max must be positive.", call. = FALSE)
   }
   for (nm in c("phi", "lambda_1se_tol", "lambda_update_tol", "alpha_update_tol",
                "tiny_movement_max_units", "tiny_movement_rate_tol",
@@ -141,6 +202,15 @@ validate_scmr_control <- function(control) {
       stop(nm, " must be finite and nonnegative.", call. = FALSE)
     }
   }
+  if (!is.null(control$start_methods) &&
+      (!is.character(control$start_methods) || !length(control$start_methods) ||
+       any(!control$start_methods %in% c("kmeans", "random", "coefficient")))) {
+    stop("start_methods must contain kmeans, random, or coefficient.", call. = FALSE)
+  }
+  if (length(control$coef_init_alpha) != 1L || !is.finite(control$coef_init_alpha) ||
+      control$coef_init_alpha < 0 || control$coef_init_alpha > 1) stop("coef_init_alpha must lie in [0, 1].", call. = FALSE)
+  if (length(control$coef_init_lambda) != 1L || !is.finite(control$coef_init_lambda) ||
+      control$coef_init_lambda <= 0) stop("coef_init_lambda must be positive.", call. = FALSE)
   if (length(control$holdout_val_prop) != 1L || !is.finite(control$holdout_val_prop) || control$holdout_val_prop <= 0 ||
       control$holdout_val_prop >= 1) stop("holdout_val_prop must lie in (0, 1).", call. = FALSE)
   if (!length(control$min_per_class) || any(!is.finite(control$min_per_class)) ||

@@ -1,0 +1,26 @@
+# Article simulation (50 replications per cell, split in two jobs of 25).
+# S1: core benchmark on the SCR domain, 150 units, T = 12, G grid 1..8
+S1-st-global-a exp=S1 spec=static pattern=global reps=25 rep_start=1
+S1-st-global-b exp=S1 spec=static pattern=global reps=25 rep_start=26
+S1-st-grid-a exp=S1 spec=static pattern=grid reps=25 rep_start=1
+S1-st-grid-b exp=S1 spec=static pattern=grid reps=25 rep_start=26
+S1-st-irregular-a exp=S1 spec=static pattern=irregular reps=25 rep_start=1
+S1-st-irregular-b exp=S1 spec=static pattern=irregular reps=25 rep_start=26
+S1-st-smooth-a exp=S1 spec=static pattern=smooth reps=25 rep_start=1
+S1-st-smooth-b exp=S1 spec=static pattern=smooth reps=25 rep_start=26
+S1-dy-global-a exp=S1 spec=dynamic pattern=global reps=25 rep_start=1
+S1-dy-global-b exp=S1 spec=dynamic pattern=global reps=25 rep_start=26
+S1-dy-grid-a exp=S1 spec=dynamic pattern=grid reps=25 rep_start=1
+S1-dy-grid-b exp=S1 spec=dynamic pattern=grid reps=25 rep_start=26
+S1-dy-irregular-a exp=S1 spec=dynamic pattern=irregular reps=25 rep_start=1
+S1-dy-irregular-b exp=S1 spec=dynamic pattern=irregular reps=25 rep_start=26
+S1-dy-smooth-a exp=S1 spec=dynamic pattern=smooth reps=25 rep_start=1
+S1-dy-smooth-b exp=S1 spec=dynamic pattern=smooth reps=25 rep_start=26
+# S4: 100 blocks of 3 x 3 units (like KSA segments), weaker signal, labels per block vs per unit
+S4-T4-a exp=S4 spec=static pattern=irregular block_size=9 n_units=100 n_time=4 delta=0.5 unit_labels=TRUE G_grid=1,2,3,4,5,6 reps=25 rep_start=1
+S4-T4-b exp=S4 spec=static pattern=irregular block_size=9 n_units=100 n_time=4 delta=0.5 unit_labels=TRUE G_grid=1,2,3,4,5,6 reps=25 rep_start=26
+S4-T12-a exp=S4 spec=static pattern=irregular block_size=9 n_units=100 n_time=12 delta=0.5 unit_labels=TRUE G_grid=1,2,3,4,5,6 reps=25 rep_start=1
+S4-T12-b exp=S4 spec=static pattern=irregular block_size=9 n_units=100 n_time=12 delta=0.5 unit_labels=TRUE G_grid=1,2,3,4,5,6 reps=25 rep_start=26
+# S3: oracle theory check, block sizes 1 and 9, T 1..24, phi 0..2
+S3-st exp=S3 spec=static reps=50
+S3-dy exp=S3 spec=dynamic reps=50
