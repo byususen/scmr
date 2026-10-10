@@ -1,0 +1,113 @@
+scmr 0.5.0 | profile pilot | membership level segment | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 36529 | units: 1620 | segments: 180 | satellite predictors: 32 | rows with previous phase: 32847 
+     Regency
+Phase 3205 3212 6171
+    1 2206 1789 2688
+    2 1545 2600 1988
+    3 1733 2452 1991
+    4 1411 2161 1527
+    5 1597 1757 2264
+    6 3649 1434 1737
+
+==== E2_mapping | fold 1 | train rows 26311 | test rows 7290 ====
+  [00:38] global cross-validation
+  [00:39] inner validation of the local penalty and membership rule
+ Multiplier   Lambda       Rule FilterLogLoss FilterKappa
+          1 0.004435 proportion         1.177     0.42679
+          1 0.004435      potts         1.177     0.42679
+          4 0.017741 proportion         1.277     0.40435
+          4 0.017741      potts         1.277     0.40394
+         16 0.070963 proportion         1.555     0.26815
+         16 0.070963      potts         1.556     0.26815
+         64 0.283853 proportion         1.752     0.08907
+         64 0.283853      potts         1.752     0.08907
+ TrainPenalizedObjective Minutes
+                  -15180 0.02830
+                  -15180 0.03753
+                  -21541 0.02542
+                  -21541 0.03395
+                  -32174 0.02372
+                  -32174 0.03292
+                  -36402 0.02308
+                  -36402 0.03210
+  Global-EN alpha 0.9 | lambda.min 0.00132 | local lambda 0.00444 ( lambda.1se x 1 ) | new-location membership proportion 
+  [00:39] local coefficient features
+  [00:39] start Global-EN G=1
+  Global-EN       G=1 | lag_observed kappa 0.5047 | 0.0 min
+  [00:39] start DSCMR-EN G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  DSCMR-EN        G=3 | lag_observed kappa 0.7134 | 0.1 min
+  [00:39] start TwoStage-EN G=3
+  TwoStage-EN     G=3 | lag_observed kappa 0.7134 | 0.0 min
+  [00:39] start DSCMR-EN-phi1 G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  DSCMR-EN-phi1   G=3 | lag_observed kappa 0.7134 | 0.1 min
+  [00:39] start SCMR-EN-static G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-static  G=3 | direct kappa 0.3019 | 0.1 min
+  [00:40] start LightGBM G=0
+  LightGBM        G=0 | lag_observed kappa 0.4835 | 0.1 min
+  [00:40] start SCR-original G=3
+  SCR-original    G=3 | lag_observed kappa 0.7065 | 0.5 min
+There were 50 or more warnings (use warnings() to see the first 50)
+
+==== REPORTS ====
+     Design          Model G         Mode TestKappa TestAccuracy TestMacroF1
+ E2_mapping SCMR-EN-static 3       direct     0.302        0.421       0.412
+ E2_mapping       DSCMR-EN 3       filter     0.426        0.524       0.519
+ E2_mapping  DSCMR-EN-phi1 3       filter     0.426        0.524       0.519
+ E2_mapping    TwoStage-EN 3       filter     0.426        0.524       0.519
+ E2_mapping   SCR-original 3       filter     0.413        0.513       0.509
+ E2_mapping      Global-EN 1       filter     0.198        0.338       0.318
+ E2_mapping       LightGBM 0       filter     0.177        0.320       0.304
+ E2_mapping       DSCMR-EN 3 lag_observed     0.713        0.762       0.760
+ E2_mapping  DSCMR-EN-phi1 3 lag_observed     0.713        0.762       0.760
+ E2_mapping    TwoStage-EN 3 lag_observed     0.713        0.762       0.760
+ E2_mapping   SCR-original 3 lag_observed     0.706        0.756       0.754
+ E2_mapping      Global-EN 1 lag_observed     0.505        0.589       0.582
+ E2_mapping       LightGBM 0 lag_observed     0.483        0.571       0.565
+ E2_mapping   SCR-original 3       plugin     0.310        0.431       0.422
+ E2_mapping       DSCMR-EN 3       plugin     0.293        0.418       0.406
+ E2_mapping  DSCMR-EN-phi1 3       plugin     0.293        0.418       0.406
+ E2_mapping    TwoStage-EN 3       plugin     0.293        0.418       0.406
+ E2_mapping       LightGBM 0       plugin     0.111        0.268       0.248
+ E2_mapping      Global-EN 1       plugin     0.108        0.267       0.238
+ TestLogLoss
+       1.398
+       1.188
+       1.188
+       1.188
+       1.180
+       1.595
+       1.653
+       0.616
+       0.616
+       0.616
+       0.607
+       1.002
+       1.036
+       2.451
+       2.024
+       2.024
+       2.024
+       2.963
+       2.404
+
+Selected G (DSCMR-EN grid, Global-EN as G = 1):
+  CriterionPLIC_AIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_AIC            E2_mapping 1 filter            G = 3
+  CriterionPLIC_BIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_BIC            E2_mapping 1 filter            G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 lag_observed      G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 filter            G = 3
+
+==== DONE ====
+Outputs in: /home/runner/work/_temp/emp_out | failed runs: 0 
