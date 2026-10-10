@@ -1,5 +1,5 @@
 # Synthetic stand-in for df_month_rec_final.csv (same column conventions), used
-# only to exercise SCMR_EN_empirical_article_v3.R in continuous integration.
+# only to exercise SCMR_EN_empirical_article_v4.R in continuous integration.
 # Usage: Rscript make_fake_ksa.R <output.csv>
 suppressPackageStartupMessages(library(scmr))
 out <- commandArgs(trailingOnly = TRUE)[1]

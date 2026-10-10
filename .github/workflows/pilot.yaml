@@ -57,7 +57,7 @@ jobs:
         with:
           extra-packages: local::., any::lightgbm
           needs: check
-      - name: Run empirical v3 on synthetic KSA-shaped data
+      - name: Run empirical v4 on synthetic KSA-shaped data
         run: |
           out="$RUNNER_TEMP/emp_out"
           mkdir -p "$out"
@@ -65,7 +65,7 @@ jobs:
           if [ -f inst/empirical/ci_env.txt ]; then set -a; . inst/empirical/ci_env.txt; set +a; fi
           Rscript inst/empirical/make_fake_ksa.R "$RUNNER_TEMP/fake.csv"
           SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
-            Rscript inst/empirical/SCMR_EN_empirical_article_v3.R 2>&1 | tee "$out/log.txt"
+            Rscript inst/empirical/SCMR_EN_empirical_article_v4.R 2>&1 | tee "$out/log.txt"
       - name: Publish results to branch ci-logs/empirical-<tag>
         if: always()
         env:

@@ -25,7 +25,8 @@ suppressPackageStartupMessages(library(scmr))
 opt <- list(exp = "S1", spec = "static", pattern = "grid", reps = 2L, rep_start = 1L, cores = 1L,
             out = "sim_out", n_units = 150L, n_time = 12L, block_size = 1L, G = 3L, delta = 1,
             G_grid = "1,2,3,4,5,6,7,8", p_active = 5L, p_inactive = 10L, coef_k = 10L, n_starts = 6L,
-            k_neighbors = 8L, new_share = 0.2, scr = TRUE, gw = TRUE, unit_labels = FALSE)
+            k_neighbors = 8L, new_share = 0.2, scr = TRUE, gw = TRUE, unit_labels = FALSE,
+            multipliers = "0.0625,0.25,1,4")
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
   if (length(kv) == 2L && kv[1] %in% names(opt)) opt[[kv[1]]] <- utils::type.convert(kv[2], as.is = TRUE)
@@ -111,7 +112,28 @@ run_dataset <- function(rep) {
   glob <- timed(fit_scmr(X[tr, ], sim$y[tr], model = "global", alpha = 0.5, lambda_rule = "lambda.min",
                          unit_id = lab[tr], control = ctrl(), seed = seed))
   if (inherits(glob, "error")) stop("global fit failed: ", conditionMessage(glob))
-  lam <- glob$lambda_used[1]
+  # Local penalty, as in the application: lambda.1se of the global CV times a
+  # multiplier chosen by inner validation (20% of the training blocks held out,
+  # two-stage fit at G = true G or 3, log-loss at the held-out blocks).
+  cvfit <- glob$fits[[1]]$fit
+  lam_base <- if (inherits(cvfit, "cv.glmnet")) cvfit$lambda.1se else glob$lambda_used[1]
+  mults <- as.numeric(strsplit(as.character(opt$multipliers), ",", fixed = TRUE)[[1]])
+  tr_blocks <- unique(lab[tr])
+  set.seed(seed + 7L)
+  val_blocks <- sample(tr_blocks, round(0.2 * length(tr_blocks)))
+  fi <- tr & !lab %in% val_blocks; vi <- tr & lab %in% val_blocks
+  G_tune <- if (!is.na(Gt) && Gt > 1L) Gt else 3L
+  tune_tab <- do.call(rbind, lapply(mults, function(mm) {
+    f <- safe(fit_scmr(X[fi, ], sim$y[fi], G = G_tune, unit_id = lab[fi], coords = lab_xy[fi, ], alpha = 0.5,
+                       lambda = lam_base * mm, control = ctrl(update_memberships = FALSE, n_starts = 1L,
+                                                              init_method = "kmeans"), seed = seed))
+    ll <- if (inherits(f, "error")) NA_real_ else {
+      pv <- predict(f, X[vi, , drop = FALSE], new_unit_id = lab[vi], new_coords = lab_xy[vi, ], membership = "potts")
+      metrics(sim$y[vi], pv, classes)$LogLoss
+    }
+    data.frame(Multiplier = mm, LogLoss = ll)
+  }))
+  lam <- if (all(is.na(tune_tab$LogLoss))) lam_base else lam_base * tune_tab$Multiplier[which.min(tune_tab$LogLoss)]
   fitG <- function(G, ids = lab, xy = lab_xy, ...) {
     if (G == 1L) return(glob)
     timed(fit_scmr(X[tr, ], sim$y[tr], G = G, unit_id = ids[tr], coords = xy[tr, ], alpha = 0.5,
@@ -201,6 +223,7 @@ run_dataset <- function(rep) {
   cols <- unique(unlist(lapply(rows, names)))
   res <- do.call(rbind, lapply(rows, function(r) { for (c in setdiff(cols, names(r))) r[[c]] <- NA; r[cols] }))
   res$Rep <- rep; res$Seed <- seed; res$G_PLIC_AIC <- G_sel; res$TrueG <- Gt
+  res$LambdaBase <- lam_base; res$Multiplier <- lam / lam_base
   list(results = res, selection = sel)
 }
 
