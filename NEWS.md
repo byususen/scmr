@@ -2,6 +2,12 @@
 
 Dynamic spatially clustered multinomial regression (DSCMR-EN).
 
+- Block-level labels: `scmr_filter_predict()` and `scmr_impute_waves()` take
+  `cluster_id`, the spatial unit that carries the cluster label (for example a
+  survey segment), while `unit_id` remains the unit whose class sequence is
+  followed (a sub-segment). Imputation pools the evidence of all sequences of a
+  block in the cluster posterior.
+
 - Estimated spatial interaction: `scmr_control(phi_update = "pl")` replaces the
   SCR label term by the Besag pseudo-log-likelihood of the Potts model and
   estimates phi after every membership sweep by maximum pseudo-likelihood

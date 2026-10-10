@@ -18,6 +18,7 @@
 #         TwoStage-EN, SCMR-EN-static (no previous phase), GW-EN (optional),
 #         LightGBM (optional, if the lightgbm package is installed),
 #         SCR-original (benchmark port of Sugasawa & Murakami's reference code).
+# Cluster labels are fitted per survey segment by default (SCMR_MEMBERSHIP_LEVEL).
 # Resume-safe: one RDS per (design, fold, model, G) under output_dir/runs.
 # Settings can be overridden with environment variables SCMR_SYNTAX_DIR,
 # SCMR_DATA_FILE, SCMR_OUTPUT_DIR and SCMR_PROFILE ("pilot", "main", "ci").
@@ -28,9 +29,17 @@
 # =============================================================================
 syntax_dir <- Sys.getenv("SCMR_SYNTAX_DIR", "C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax")
 data_file <- Sys.getenv("SCMR_DATA_FILE", file.path(syntax_dir, "df_month_rec_final.csv"))
-output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v3b"))
-# Cached global fits and features of an earlier run are reused when present.
-reuse_cache_dir <- file.path(dirname(syntax_dir), "Results", "Real data v3", "cache")
+output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v3c"))
+# Cached global fits of an earlier run are reused when present (the global
+# model does not depend on the membership level).
+reuse_cache_dirs <- file.path(dirname(syntax_dir), "Results", c("Real data v3b", "Real data v3"), "cache")
+# Spatial level of the cluster labels. "segment": one label per survey segment
+# (its 3 x 3 sub-segments share it) with the Potts graph among segments;
+# "subsegment": one label per sub-segment (runs v3 and v3b). In v3b the
+# sub-segment graph linked almost only sub-segments of the same segment, so the
+# estimated phi saturated and the Potts term gave no coherence between
+# segments. Class sequences (lags, filter, imputation) stay per sub-segment.
+membership_level <- Sys.getenv("SCMR_MEMBERSHIP_LEVEL", "segment")
 run_profile <- Sys.getenv("SCMR_PROFILE", "pilot")   # "pilot" first, then "main"
 
 designs_to_run <- c("E2_mapping", "E1_nowcast", "E3_imputation")
@@ -55,7 +64,9 @@ profiles <- list(
   main  = list(folds = 1:5, G_grid = 1:8, n_starts = 6L, max_iter = 30L, gw_anchors = 300L,
                gw_k = c(50, 100, 200, 400), coef_k = 12L, coef_anchors = 600L, E3_G = NA))
 if (!run_profile %in% names(profiles)) stop("Unknown profile: ", run_profile)
+if (!membership_level %in% c("segment", "subsegment")) stop("Unknown membership level: ", membership_level)
 prof <- profiles[[run_profile]]
+if (membership_level == "segment") prof$coef_k <- 3L   # about 27 sub-segments, as 12 sub-segments before
 if (nzchar(Sys.getenv("SCMR_FOLDS"))) prof$folds <- as.integer(strsplit(Sys.getenv("SCMR_FOLDS"), ",")[[1]])
 if (nzchar(Sys.getenv("SCMR_G_GRID"))) {
   prof$G_grid <- as.integer(strsplit(Sys.getenv("SCMR_G_GRID"), ",")[[1]])
@@ -72,9 +83,9 @@ keep_radar <- c("rvi", "vh", "vv")
 phase_labels <- c("1" = "Early vegetative", "2" = "Late vegetative", "3" = "Generative",
                   "4" = "Harvest", "5" = "Land preparation", "6" = "Other")
 alpha_grid <- c(0.5, 0.9)
-min_units <- 10L
+min_units <- if (membership_level == "segment") 5L else 10L   # labelled units per cluster
 min_per_class <- 5L
-k_neighbors <- 8L                # 3 x 3 sub-segments of a segment plus nearest segments
+k_neighbors <- 8L                # Potts / new-location neighbours among labelled units
 # Penalty of the local (clustered and GW) models: the global CV "lambda.1se".
 # On the KSA data lambda.min is tiny (about 4e-5): the previous phase nearly
 # separates the classes inside clusters, glmnet then converges very slowly and
@@ -98,7 +109,7 @@ if (!requireNamespace("scmr", quietly = TRUE) || utils::packageVersion("scmr") <
 }
 suppressPackageStartupMessages(library(scmr))
 cat("scmr", as.character(utils::packageVersion("scmr")), "| profile", run_profile,
-    "| LightGBM", use_lightgbm, "\n")
+    "| membership level", membership_level, "| LightGBM", use_lightgbm, "\n")
 dir.create(file.path(output_dir, "runs"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(output_dir, "errors"), recursive = TRUE, showWarnings = FALSE)
 banner <- function(...) cat("\n==== ", ..., " ====\n", sep = "")
@@ -156,6 +167,17 @@ unit_xy <- stats::aggregate(cbind(lati_mean, long_mean) ~ id_subsegmen, data = d
 dat$unit_lat <- unit_xy$lati_mean[match(dat$id_subsegmen, unit_xy$id_subsegmen)]
 dat$unit_lon <- unit_xy$long_mean[match(dat$id_subsegmen, unit_xy$id_subsegmen)]
 coords_all <- cbind(dat$unit_lat, dat$unit_lon)
+# Labelled units (mem_id) and their coordinates: segment centroids or the
+# sub-segment centroids.
+if (membership_level == "segment") {
+  mem_id <- dat$id_segmen
+  seg_xy <- stats::aggregate(cbind(unit_lat, unit_lon) ~ id_segmen,
+                             data = unique(dat[, c("id_segmen", "id_subsegmen", "unit_lat", "unit_lon")]), FUN = mean)
+  mem_xy <- cbind(seg_xy$unit_lat[match(mem_id, seg_xy$id_segmen)], seg_xy$unit_lon[match(mem_id, seg_xy$id_segmen)])
+} else {
+  mem_id <- dat$id_subsegmen
+  mem_xy <- coords_all
+}
 
 month_mm <- stats::model.matrix(~ factor(month, levels = 1:12) - 1, dat)
 colnames(month_mm) <- paste0("month", 1:12)
@@ -268,7 +290,8 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
                       modes = c("filter", "plugin", "lag_observed"), y_obs_impute = NULL) {
   path <- run_file(design, fold, model, G)
   if (file.exists(path)) return(invisible(readRDS(path)))
-  meta <- data.frame(Design = design, Fold = fold, Seed = seed, Model = model, G = G)
+  meta <- data.frame(Design = design, Fold = fold, Seed = seed, Model = model, G = G,
+                     Level = if (model %in% c("GW-EN", "LightGBM", "Global-EN")) "none" else membership_level)
   static <- model == "SCMR-EN-static"
   cols_all <- if (static) colnames(X_base) else colnames(X_full)
   tr_rows <- train
@@ -287,23 +310,24 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   } else if (model == "SCR-original") {
     # Benchmark: multinomial port of the reference SCR code (unpenalized,
     # simultaneous updates, phi = 1, k-means start, 5 nearest neighbours).
-    fit_scr_original(Xtr, ytr, dat$id_subsegmen[tr_rows], coords_all[tr_rows, ], G = G, phi = 1,
+    fit_scr_original(Xtr, ytr, mem_id[tr_rows], mem_xy[tr_rows, ], G = G, phi = 1,
                      k_neighbors = 5, maxitr = scr_maxitr, seed = seed)
   } else if (G == 1L && !static) {
     global
   } else {
-    fit_scmr(Xtr, ytr, model = if (G == 1L) "global" else "scmr", G = G, unit_id = dat$id_subsegmen[tr_rows],
-             coords = coords_all[tr_rows, ], alpha = alp, lambda = lam, control = control_for(model),
+    fit_scmr(Xtr, ytr, model = if (G == 1L) "global" else "scmr", G = G, unit_id = mem_id[tr_rows],
+             coords = mem_xy[tr_rows, ], alpha = alp, lambda = lam, control = control_for(model),
              seed = seed, init_features = if (!static && G > 1L) features else NULL)
   }
   fit_sec <- proc.time()[["elapsed"]] - t0
   te_unit <- dat$id_subsegmen[test]; te_time <- dat$time[test]; te_xy <- coords_all[test, , drop = FALSE]
+  te_mem <- mem_id[test]; te_mem_xy <- mem_xy[test, , drop = FALSE]
   Xte <- X_lagfill[test, cols, drop = FALSE]
   prob_fun <- function(x, idx) {
     if (inherits(fit, "lgb.Booster")) return(predict_lightgbm(fit, x))
     if (inherits(fit, "scmr_gw")) return(predict(fit, x, te_xy[idx, , drop = FALSE]))
     if (fit$model == "global") return(predict(fit, x))
-    predict(fit, x, new_unit_id = te_unit[idx], new_coords = te_xy[idx, , drop = FALSE], membership = new_membership)
+    predict(fit, x, new_unit_id = te_mem[idx], new_coords = te_mem_xy[idx, , drop = FALSE], membership = new_membership)
   }
   a0 <- as.numeric(table(ytr)) / length(ytr)
   preds <- list()
@@ -316,12 +340,14 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
     }
     if ("filter" %in% modes) {
       preds$filter <- if (inherits(fit, c("scmr_fit"))) {
-        scmr_filter_predict(fit, Xte, te_unit, te_time, te_xy, lag_cols, membership = new_membership)
+        scmr_filter_predict(fit, Xte, te_unit, te_time, te_mem_xy, lag_cols, membership = new_membership,
+                            cluster_id = te_mem)
       } else generic_filter(prob_fun, Xte, te_unit, te_time, a0)
     }
     if ("plugin" %in% modes) preds$plugin <- plugin_predict(prob_fun, Xte, te_unit, te_time, which.max(a0))
     if ("impute" %in% modes) {
-      preds$impute <- scmr_impute_waves(fit, Xte, y_obs_impute, te_unit, te_time, te_xy, lag_cols, membership = new_membership)
+      preds$impute <- scmr_impute_waves(fit, Xte, y_obs_impute, te_unit, te_time, te_mem_xy, lag_cols,
+                                        membership = new_membership, cluster_id = te_mem)
     }
   }
   results <- list(); classes <- list(); rowpred <- list()
@@ -401,14 +427,15 @@ tune_local <- function(design, fold, train, lam_base, alp, seed, cache_dir) {
   tab <- data.frame()
   for (m in tune_multipliers) {
     t0 <- proc.time()[["elapsed"]]
-    fit <- tryCatch(fit_scmr(Xfit[, cols, drop = FALSE], yfit, G = tune_G, unit_id = dat$id_subsegmen[fit_rows],
-                             coords = coords_all[fit_rows, ], alpha = alp, lambda = lam_base * m,
+    fit <- tryCatch(fit_scmr(Xfit[, cols, drop = FALSE], yfit, G = tune_G, unit_id = mem_id[fit_rows],
+                             coords = mem_xy[fit_rows, ], alpha = alp, lambda = lam_base * m,
                              control = utils::modifyList(control_for("TwoStage-EN"), list(verbose = FALSE)),
                              seed = seed), error = function(e) e)
     if (inherits(fit, "error")) { cat("    multiplier", m, "failed:", conditionMessage(fit), "\n"); next }
     for (rule in tune_rules) {
       p <- scmr_filter_predict(fit, X_lagfill[val_rows, cols, drop = FALSE], dat$id_subsegmen[val_rows],
-                               dat$time[val_rows], coords_all[val_rows, , drop = FALSE], lag_cols, membership = rule)
+                               dat$time[val_rows], mem_xy[val_rows, , drop = FALSE], lag_cols, membership = rule,
+                               cluster_id = mem_id[val_rows])
       mb <- metric_block(dat$phase[val_rows], p, "")
       tab <- rbind(tab, data.frame(Multiplier = m, Lambda = lam_base * m, Rule = rule,
                                    FilterLogLoss = mb$LogLoss, FilterKappa = mb$Kappa,
@@ -432,10 +459,9 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
   cache_dir <- file.path(output_dir, "cache")
   dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
   gfile <- file.path(cache_dir, sprintf("%s_fold%02d_global.rds", design, fold))
-  old_g <- file.path(reuse_cache_dir, basename(gfile))
-  if (!file.exists(gfile) && file.exists(old_g)) file.copy(old_g, gfile)
-  old_f <- file.path(reuse_cache_dir, sprintf("%s_fold%02d_features.rds", design, fold))
-  if (file.exists(old_f)) file.copy(old_f, file.path(cache_dir, basename(old_f)))
+  old_g <- file.path(reuse_cache_dirs, basename(gfile))
+  old_g <- old_g[file.exists(old_g)]
+  if (!file.exists(gfile) && length(old_g)) file.copy(old_g[1], gfile)
   if (file.exists(gfile)) global <- readRDS(gfile) else {
     cat(sprintf("  [%s] global cross-validation\n", format(Sys.time(), "%H:%M")))
     global <- global_fit(train, seed)
@@ -457,8 +483,8 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
     if (file.exists(ffile)) features <- readRDS(ffile) else {
       cat(sprintf("  [%s] local coefficient features\n", format(Sys.time(), "%H:%M")))
       Xtr <- X_full[train, global$x_colnames, drop = FALSE]
-      features <- scmr_local_coefficients(Xtr, droplevels(dat$phase[train]), dat$id_subsegmen[train],
-                                          coords_all[train, ], k = prof$coef_k, alpha = 0.1, lambda = 0.0625,
+      features <- scmr_local_coefficients(Xtr, droplevels(dat$phase[train]), mem_id[train],
+                                          mem_xy[train, ], k = prof$coef_k, alpha = 0.1, lambda = 0.0625,
                                           anchors = prof$coef_anchors, type_multinomial = "ungrouped", seed = seed)
       saveRDS(features, ffile)
     }

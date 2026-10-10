@@ -95,7 +95,11 @@ initial_distribution <- function(fit, init, units) {
 #' @param fit A fitted `scmr_fit` whose predictors include `lag_columns`.
 #' @param newx Predictor matrix with the fitted columns; values in the lag
 #'   columns are ignored.
-#' @param unit_id,time Unit and integer time index per row.
+#' @param unit_id,time Unit and integer time index per row (the unit whose
+#'   class sequence is followed over time).
+#' @param cluster_id Spatial unit that carries the cluster label, per row;
+#'   defaults to `unit_id`. Use it when labels were fitted for larger blocks
+#'   (for example survey segments) than the observed sequences (sub-segments).
 #' @param new_coords Coordinates per row, needed for units not in training.
 #' @param lag_columns Names of the lag indicator columns, in class order.
 #' @param init Optional initial class per unit (named vector) or a matrix of
@@ -104,13 +108,14 @@ initial_distribution <- function(fit, init, units) {
 #' @return A probability matrix (rows of `newx`, classes in columns).
 #' @export
 scmr_filter_predict <- function(fit, newx, unit_id, time, new_coords = NULL, lag_columns,
-                                init = NULL, membership = c("potts", "proportion", "majority")) {
+                                init = NULL, membership = c("potts", "proportion", "majority"),
+                                cluster_id = unit_id) {
   membership <- match.arg(membership)
   check_lag_columns(fit, lag_columns)
   newx <- check_newx(newx, fit$x_colnames)
   n <- nrow(newx)
   C <- length(fit$class_levels)
-  pp <- if (fit$model == "scmr") assign_test_PP(fit, unit_id, new_coords, n, membership) else
+  pp <- if (fit$model == "scmr") assign_test_PP(fit, cluster_id, new_coords, n, membership) else
     matrix(1, n, 1L)
   trans <- lapply(fit$fits, transition_array, newx = newx, lag_columns = lag_columns,
                   classes = fit$class_levels)
@@ -146,10 +151,13 @@ scmr_filter_predict <- function(fit, newx, unit_id, time, new_coords = NULL, lag
 #' @inheritParams scmr_filter_predict
 #' @param y Observed classes with `NA` for missing waves.
 #' @return A probability matrix with one row per input row (observed rows are
-#'   indicator rows) and attribute `cluster_posterior` (units x clusters).
+#'   indicator rows) and attribute `cluster_posterior` (units x clusters). When
+#'   several units share a `cluster_id`, the cluster posterior pools the
+#'   evidence of all of them.
 #' @export
 scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, lag_columns,
-                              init = NULL, membership = c("potts", "proportion", "majority")) {
+                              init = NULL, membership = c("potts", "proportion", "majority"),
+                              cluster_id = unit_id) {
   membership <- match.arg(membership)
   check_lag_columns(fit, lag_columns)
   newx <- check_newx(newx, fit$x_colnames)
@@ -157,7 +165,7 @@ scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, la
   C <- length(fit$class_levels)
   yi <- match(as.character(y), fit$class_levels)
   if (any(is.na(yi) & !is.na(y))) stop("y contains unknown classes.", call. = FALSE)
-  pp <- if (fit$model == "scmr") assign_test_PP(fit, unit_id, new_coords, n, membership) else
+  pp <- if (fit$model == "scmr") assign_test_PP(fit, cluster_id, new_coords, n, membership) else
     matrix(1, n, 1L)
   trans <- lapply(fit$fits, transition_array, newx = newx, lag_columns = lag_columns,
                   classes = fit$class_levels)
@@ -167,15 +175,16 @@ scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, la
   out <- matrix(0, n, C, dimnames = list(NULL, fit$class_levels))
   post_g <- matrix(0, length(seqs), G, dimnames = list(names(seqs), paste0("G", seq_len(G))))
   evidence <- function(r) { e <- rep(1, C); if (!is.na(yi[r])) { e[] <- 0; e[yi[r]] <- 1 }; e }
+  loglik_ug <- matrix(-Inf, length(seqs), G, dimnames = dimnames(post_g))
+  marg_u <- vector("list", length(seqs))
+  names(marg_u) <- names(seqs)
   for (u in names(seqs)) {
     idx <- seqs[[u]]
     Tn <- length(idx)
     restart <- c(TRUE, diff(time[idx]) != 1)
-    logw <- rep(-Inf, G)
     marg <- vector("list", G)
     for (g in seq_len(G)) {
-      wg <- pp[idx[1], g]
-      if (wg <= 0) next
+      if (pp[idx[1], g] <= 0) next
       f <- matrix(0, Tn, C)
       loglik <- 0
       for (t in seq_len(Tn)) {
@@ -193,12 +202,24 @@ scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, la
       }
       m <- f * b
       marg[[g]] <- m / rowSums(m)
-      logw[g] <- log(wg) + loglik
+      loglik_ug[u, g] <- loglik
     }
+    marg_u[[u]] <- marg
+  }
+  # All sequences of one cluster block share its label, so the posterior of the
+  # label pools their evidence: log pi_g + sum over the block's sequences.
+  block <- as.character(cluster_id)[vapply(seqs, `[`, integer(1), 1L)]
+  for (bk in unique(block)) {
+    us <- which(block == bk)
+    w0 <- pp[seqs[[us[1]]][1], ]
+    logw <- ifelse(w0 > 0, log(w0), -Inf) + colSums(loglik_ug[us, , drop = FALSE])
     r <- exp(logw - max(logw))
     r <- r / sum(r)
-    post_g[u, ] <- r
-    for (g in which(r > 0)) out[idx, ] <- out[idx, ] + r[g] * marg[[g]]
+    for (j in us) {
+      post_g[j, ] <- r
+      idx <- seqs[[j]]
+      for (g in which(r > 0)) out[idx, ] <- out[idx, ] + r[g] * marg_u[[j]][[g]]
+    }
   }
   out <- normalize_prob_matrix(out, fit$class_levels, n)
   attr(out, "cluster_posterior") <- post_g

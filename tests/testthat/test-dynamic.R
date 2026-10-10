@@ -116,6 +116,23 @@ test_that("dynamic spatial fit predicts valid mixtures at new units", {
   expect_equal(rowSums(attr(pi, "cluster_posterior")), rep(1, 12), tolerance = 1e-10, ignore_attr = TRUE)
   obs <- which(!is.na(yo))
   expect_equal(pi[cbind(obs, match(yo[obs], fit$class_levels))], rep(1, length(obs)), tolerance = 1e-10)
+  # Labels carried by blocks of two units: the block posterior pools the
+  # evidence, i.e. it is proportional to r1 * r2 / prior.
+  nu <- unique(d$unit_id[new])
+  blk <- paste0("B", (match(d$unit_id[new], nu) + 1L) %/% 2L)
+  bxy <- apply(d$coords[new, ], 2, function(v) ave(v, blk))
+  p0 <- scmr_impute_waves(fit, d$xx[new, ], yo, d$unit_id[new], d$time[new], bxy, d$lag_cols,
+                          cluster_id = blk)
+  pb <- scmr_impute_waves(fit, d$xx[new, ], yo, d$unit_id[new], d$time[new], bxy, d$lag_cols)
+  r_sep <- attr(pb, "cluster_posterior")
+  prior <- scmr:::assign_test_PP(fit, blk, bxy, sum(new), "potts")
+  r_blk <- attr(p0, "cluster_posterior")
+  expect_equal(r_blk[1, ], r_blk[2, ], tolerance = 1e-12)
+  pr1 <- prior[match(nu[1], d$unit_id[new]), ]
+  manual <- r_sep[1, ] * r_sep[2, ] / pr1
+  expect_equal(unname(r_blk[1, ]), unname(manual / sum(manual)), tolerance = 1e-8)
+  pf_blk <- scmr_filter_predict(fit, d$xx[new, ], d$unit_id[new], d$time[new], bxy, d$lag_cols, cluster_id = blk)
+  expect_equal(rowSums(pf_blk), rep(1, sum(new)), tolerance = 1e-10)
 })
 
 test_that("panel generator, block folds and GW comparator behave", {
