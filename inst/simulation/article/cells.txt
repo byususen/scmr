@@ -1,0 +1,5 @@
+# Smoke cells (one replication, short G grid)
+s1st exp=S1 spec=static pattern=grid reps=1 G_grid=1,3,6
+s1dy exp=S1 spec=dynamic pattern=irregular reps=1 G_grid=1,3
+s4st exp=S4 spec=static pattern=irregular block_size=9 n_units=60 unit_labels=TRUE reps=1 G_grid=1,3
+s3st exp=S3 spec=static reps=1

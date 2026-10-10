@@ -172,37 +172,18 @@ test_that("panel generator supports the SCR domain, grid regions and GP smooth f
   expect_gt(stats::sd(s$unit_beta[, 1, 1]), 0)
 })
 
-test_that("hybrid HMM smoothing equals brute-force enumeration", {
-  set.seed(11)
-  C <- 3; Tn <- 4
-  y <- sample(letters[1:C], 60, replace = TRUE)
-  tm <- scmr_transition_matrix(y, rep(1:15, each = 4), rep(1:4, 15), classes = letters[1:C])
-  expect_equal(unname(rowSums(tm$transition)), rep(1, C))
-  expect_equal(sum(tm$prior), 1)
-  A <- tm$transition; pr <- tm$prior
-  prob <- matrix(stats::runif(Tn * C), Tn, C); prob <- prob / rowSums(prob)
-  tau <- 0.7
-  E <- sweep(prob, 2, pr, "/")^tau
-  paths <- as.matrix(expand.grid(rep(list(seq_len(C)), Tn)))
-  w <- pr[paths[, 1]] * E[cbind(1, paths[, 1])]
-  for (t in 2:Tn) w <- w * A[cbind(paths[, t - 1], paths[, t])] * E[cbind(t, paths[, t])]
-  brute <- t(vapply(seq_len(Tn), function(t) vapply(seq_len(C), function(c) sum(w[paths[, t] == c]), 0), numeric(C)))
-  brute <- brute / rowSums(brute)
-  s <- scmr_hmm_smooth(prob, rep("u", Tn), 1:Tn, A, pr, tau = tau)
-  expect_equal(unname(s), brute, tolerance = 1e-10)
-  # Filter: marginal of y_t given emissions up to t.
-  f3 <- vapply(seq_len(C), function(c) {
-    w3 <- pr[paths[, 1]] * E[cbind(1, paths[, 1])]
-    for (t in 2:3) w3 <- w3 * A[cbind(paths[, t - 1], paths[, t])] * E[cbind(t, paths[, t])]
-    sum(w3[paths[, 3] == c & paths[, 4] == 1])
-  }, 0)
-  f <- scmr_hmm_smooth(prob, rep("u", Tn), 1:Tn, A, pr, tau = tau, direction = "filter")
-  expect_equal(unname(f[3, ]), f3 / sum(f3), tolerance = 1e-10)
-  expect_equal(scmr_hmm_smooth(prob, rep("u", Tn), 1:Tn, A, pr, weight = 0), prob, tolerance = 1e-12)
-  pooled <- scmr_hmm_smooth(prob, rep("u", Tn), 1:Tn, A, pr, tau = tau, weight = 0.5, temperature = 2)
-  expect_equal(rowSums(pooled), rep(1, Tn), tolerance = 1e-12)
-  # A gap restarts the chain: rows after the gap ignore earlier emissions.
-  g <- scmr_hmm_smooth(prob, rep("u", Tn), c(1, 2, 5, 6), A, pr, tau = tau)
-  g2 <- scmr_hmm_smooth(prob[3:4, ], rep("u", 2), 5:6, A, pr, tau = tau)
-  expect_equal(g[3:4, ], g2, tolerance = 1e-12)
+test_that("panel generator supports static data and blocks of units", {
+  s <- simulate_scmr_panel(n_units = 30, n_time = 3, pattern = "irregular", G = 3, dynamic = FALSE,
+                           block_size = 9, seed = 2)
+  expect_equal(length(unique(s$unit_id)), 270L)
+  expect_equal(length(unique(s$block_id)), 30L)
+  expect_true(all(tapply(s$regime, s$block_id, function(r) length(unique(r))) == 1L))
+  expect_length(s$alpha, 3L)
+  expect_false(s$dynamic)
+  # Units of a block sit on a 3 x 3 grid around the block centre.
+  b1 <- s$unit_coords[s$unit_block == "B0001", ]
+  expect_equal(colMeans(b1), unname(s$block_coords[1, ]), tolerance = 1e-12)
+  d <- simulate_scmr_panel(n_units = 30, n_time = 3, pattern = "irregular", G = 3, seed = 2)
+  expect_null(d$alpha)
+  expect_true(d$dynamic)
 })

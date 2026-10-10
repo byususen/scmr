@@ -1,0 +1,70 @@
+name: article-simulation
+
+# Push to a branch named sim/<tag> runs every line of
+# inst/simulation/article/cells.txt ("<cell id> <arguments>") as its own job;
+# each job publishes its output to branch ci-logs/sim-<tag>-<cell id>.
+on:
+  push:
+    branches: ['sim/**']
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      cells: ${{ steps.cells.outputs.cells }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cells
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          cells = []
+          for line in open("inst/simulation/article/cells.txt"):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              cid, _, args = line.partition(" ")
+              cells.append({"id": cid, "args": args.strip()})
+          print("cells=" + json.dumps(cells))
+          PY
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.plan.outputs.cells) }}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: local::.
+          needs: check
+      - name: Run cell
+        run: |
+          out="$RUNNER_TEMP/sim_out"
+          mkdir -p "$out"
+          echo "${{ matrix.cell.args }}" > "$out/args.txt"
+          Rscript inst/simulation/article/sim_article.R ${{ matrix.cell.args }} cores=4 out="$out" 2>&1 | tee "$out/log.txt"
+      - name: Publish
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/sim_out"
+          echo "${GITHUB_SHA} ${GITHUB_REF_NAME} run ${GITHUB_RUN_ID} cell ${{ matrix.cell.id }}" > RUN.txt
+          git init -q
+          git checkout -q -b logs
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Simulation ${GITHUB_RUN_ID} ${{ matrix.cell.id }}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}" HEAD:refs/heads/ci-logs/sim-${GITHUB_REF_NAME#sim/}-${{ matrix.cell.id }}
