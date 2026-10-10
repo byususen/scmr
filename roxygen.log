@@ -1,0 +1,6 @@
+ℹ Setting Config/roxygen2/version to "8.1.1"
+ℹ Loading scmr
+Writing 'scmr_filter_predict.Rd'
+Writing 'scmr_impute_waves.Rd'
+Writing 'fit_scr_original.Rd'
+Writing 'simulate_scmr_panel.Rd'
