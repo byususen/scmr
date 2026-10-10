@@ -15,7 +15,9 @@
 #                 forward-backward smoothing (scmr_impute_waves) and compared
 #                 with carry-forward of the last observed phase.
 # Models: Global-EN, DSCMR-EN (estimated phi), DSCMR-EN-phi1 (ablation),
-#         TwoStage-EN, SCMR-EN-static (no previous phase), GW-EN (optional),
+#         TwoStage-EN, SCMR-EN-static and Global-EN-static (no previous
+#         phase; predictions direct and smoothed over time by a hybrid HMM,
+#         scmr_hmm_smooth), GW-EN (optional),
 #         LightGBM (optional, if the lightgbm package is installed),
 #         SCR-original (benchmark port of Sugasawa & Murakami's reference code).
 # Cluster labels are fitted per survey segment by default (SCMR_MEMBERSHIP_LEVEL).
@@ -29,10 +31,15 @@
 # =============================================================================
 syntax_dir <- Sys.getenv("SCMR_SYNTAX_DIR", "C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax")
 data_file <- Sys.getenv("SCMR_DATA_FILE", file.path(syntax_dir, "df_month_rec_final.csv"))
-output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v3c"))
-# Cached global fits of an earlier run are reused when present (the global
-# model does not depend on the membership level).
-reuse_cache_dirs <- file.path(dirname(syntax_dir), "Results", c("Real data v3b", "Real data v3"), "cache")
+output_dir <- Sys.getenv("SCMR_OUTPUT_DIR", file.path(dirname(syntax_dir), "Results", "Real data v4"))
+# Cached global fits of earlier runs are reused when present (the global model
+# does not depend on the membership level).
+reuse_cache_dirs <- file.path(dirname(syntax_dir), "Results", c("Real data v3c", "Real data v3b", "Real data v3"), "cache")
+# Run v3c (segment-level labels, fold 1, same settings as the pilot and main
+# profiles below): its tuning, local features and fitted runs of the dynamic
+# models are reused; the static models are refitted because v4 adds the
+# smoothed prediction modes.
+reuse_level_dir <- file.path(dirname(syntax_dir), "Results", "Real data v3c")
 # Spatial level of the cluster labels. "segment": one label per survey segment
 # (its 3 x 3 sub-segments share it) with the Potts graph among segments;
 # "subsegment": one label per sub-segment (runs v3 and v3b). In v3b the
@@ -40,7 +47,7 @@ reuse_cache_dirs <- file.path(dirname(syntax_dir), "Results", c("Real data v3b",
 # estimated phi saturated and the Potts term gave no coherence between
 # segments. Class sequences (lags, filter, imputation) stay per sub-segment.
 membership_level <- Sys.getenv("SCMR_MEMBERSHIP_LEVEL", "segment")
-run_profile <- Sys.getenv("SCMR_PROFILE", "pilot")   # "pilot" first, then "main"
+run_profile <- Sys.getenv("SCMR_PROFILE", "main")
 
 designs_to_run <- c("E2_mapping", "E1_nowcast", "E3_imputation")
 use_gw <- TRUE                   # geographically weighted comparator (slow on full data)
@@ -55,14 +62,19 @@ if (nzchar(Sys.getenv("SCMR_USE_SCR"))) use_scr_original <- as.logical(Sys.geten
 
 profiles <- list(
   ci    = list(folds = 1L, G_grid = c(1L, 2L), n_starts = 2L, max_iter = 10L, gw_anchors = 30L,
-               gw_k = c(10, 20), coef_k = 10L, coef_anchors = 60L, E3_G = 2L),
+               gw_k = c(10, 20), coef_k = 10L, coef_anchors = 60L, E3_G = 2L,
+               ablation = "selected", scr_G = 2L),
   # Local coefficient initialisation over about one segment (k = 12 units) with
   # six starts: in the panel pilot this raised the ARI of irregular regimes at
   # T = 12 from 0.23 to 0.78.
   pilot = list(folds = 1L, G_grid = c(1L, 3L, 6L), n_starts = 3L, max_iter = 20L, gw_anchors = 300L,
-               gw_k = c(50, 100, 200), coef_k = 12L, coef_anchors = 600L, E3_G = 3L),
-  main  = list(folds = 1:5, G_grid = 1:8, n_starts = 6L, max_iter = 30L, gw_anchors = 300L,
-               gw_k = c(50, 100, 200, 400), coef_k = 12L, coef_anchors = 600L, E3_G = NA))
+               gw_k = c(50, 100, 200), coef_k = 12L, coef_anchors = 600L, E3_G = 3L,
+               ablation = "all", scr_G = c(3L, 6L)),
+  # Main study (lean): G in {1, 3, 6, 8}; the phi = 1 ablation only at the G
+  # selected by PLIC-AIC for DSCMR-EN; SCR-original at G = 3 and 6.
+  main  = list(folds = 1:5, G_grid = c(1L, 3L, 6L, 8L), n_starts = 3L, max_iter = 20L, gw_anchors = 300L,
+               gw_k = c(50, 100, 200), coef_k = 12L, coef_anchors = 600L, E3_G = NA,
+               ablation = "selected", scr_G = c(3L, 6L)))
 if (!run_profile %in% names(profiles)) stop("Unknown profile: ", run_profile)
 if (!membership_level %in% c("segment", "subsegment")) stop("Unknown membership level: ", membership_level)
 prof <- profiles[[run_profile]]
@@ -99,6 +111,14 @@ local_lambda_rule <- "lambda.1se"
 tune_multipliers <- c(1, 4, 16, 64)
 tune_rules <- c("proportion", "potts")
 tune_G <- 3L
+# Temporal smoothing of the static models (hybrid HMM, scmr_hmm_smooth): the
+# static probabilities act as scaled emissions (p(y|x) / prior)^tau with the
+# phase transition matrix of the training sequences; the smoothed marginals are
+# pooled with the static probabilities (weight). tau and weight are chosen in
+# the inner validation by log-loss. Mapping uses the whole season of a new
+# location ("smooth"); "smooth_filter" uses only the months up to t.
+hmm_taus <- c(0.5, 0.75, 1)
+hmm_weights <- c(0.25, 0.5, 0.75, 1)
 show_progress <- TRUE            # print every membership iteration
 
 # =============================================================================
@@ -287,12 +307,18 @@ predict_lightgbm <- function(model, X) {
 
 # Fit one model (or reuse), evaluate under the design's prediction modes, save.
 run_model <- function(design, fold, model, G, train, test, seed, global, lam, alp, features = NULL,
-                      modes = c("filter", "plugin", "lag_observed"), y_obs_impute = NULL) {
+                      modes = c("filter", "plugin", "lag_observed"), y_obs_impute = NULL, hmm = NULL) {
   path <- run_file(design, fold, model, G)
+  old <- file.path(reuse_level_dir, "runs", basename(path))
+  if (!file.exists(path) && membership_level == "segment" && file.exists(old) &&
+      !model %in% c("SCMR-EN-static", "Global-EN-static")) {
+    file.copy(old, path)
+    cat(sprintf("  %-15s G=%d | reused from v3c\n", model, G))
+  }
   if (file.exists(path)) return(invisible(readRDS(path)))
   meta <- data.frame(Design = design, Fold = fold, Seed = seed, Model = model, G = G,
-                     Level = if (model %in% c("GW-EN", "LightGBM", "Global-EN")) "none" else membership_level)
-  static <- model == "SCMR-EN-static"
+                     Level = if (model %in% c("GW-EN", "LightGBM", "Global-EN", "Global-EN-static")) "none" else membership_level)
+  static <- model %in% c("SCMR-EN-static", "Global-EN-static")
   cols_all <- if (static) colnames(X_base) else colnames(X_full)
   tr_rows <- train
   Xtr <- X_full[tr_rows, cols_all, drop = FALSE]
@@ -302,7 +328,10 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   ytr <- droplevels(dat$phase[tr_rows])
   if (!identical(levels(ytr), class_levels)) stop("A class is absent from training rows.")
   t0 <- proc.time()[["elapsed"]]
-  fit <- if (model == "Global-EN") global else if (model == "LightGBM") {
+  fit <- if (model == "Global-EN") global else if (model == "Global-EN-static") {
+    fit_scmr(Xtr, ytr, model = "global", unit_id = dat$id_subsegmen[tr_rows], control = control_for("Global-EN"),
+             nfolds = 5L, lambda_rule = "lambda.min", seed = seed)
+  } else if (model == "LightGBM") {
     fit_lightgbm(Xtr, ytr, seed)
   } else if (model == "GW-EN") {
     fit_gw_multinom_en(Xtr, ytr, dat$id_subsegmen[tr_rows], coords_all[tr_rows, ], k_grid = prof$gw_k,
@@ -333,6 +362,13 @@ run_model <- function(design, fold, model, G, train, test, seed, global, lam, al
   preds <- list()
   if (static) {
     preds$direct <- prob_fun(Xte, seq_along(test))
+    if (!is.null(hmm)) {
+      sm <- function(tau, weight, direction) scmr_hmm_smooth(preds$direct, te_unit, te_time, hmm$transition,
+                                                             hmm$prior, tau = tau, weight = weight, direction = direction)
+      preds$smooth <- sm(hmm$tau, hmm$weight, "smooth")
+      preds$smooth_filter <- sm(hmm$tau, hmm$weight, "filter")
+      preds$smooth_pure <- sm(1, 1, "smooth")
+    }
   } else {
     if ("lag_observed" %in% modes) {
       ok <- lagd$available[test]
@@ -451,6 +487,52 @@ tune_local <- function(design, fold, train, lam_base, alp, seed, cache_dir) {
   tuned
 }
 
+# Inner validation of the smoothing (tau, weight) with a global static fit at
+# the local penalty; same held-out training segments as tune_local().
+tune_hmm <- function(design, fold, train, lam, alp, seed, cache_dir) {
+  tfile <- file.path(cache_dir, sprintf("%s_fold%02d_hmm_tuning.rds", design, fold))
+  if (file.exists(tfile)) {
+    tuned <- readRDS(tfile)
+    print(tuned$table, row.names = FALSE, digits = 4)
+    return(tuned)
+  }
+  cat(sprintf("  [%s] inner validation of the temporal smoothing\n", format(Sys.time(), "%H:%M")))
+  inner <- scmr_block_folds(dat$id_segmen[train], dat$regency[train], nfolds = 5, seed = seed + 17L)
+  fit_rows <- train[inner != 1L]
+  val_units <- unique(dat$id_subsegmen[train[inner == 1L]])
+  val_rows <- which(dat$id_subsegmen %in% val_units)
+  Xfit <- X_base[fit_rows, , drop = FALSE]
+  cols <- colnames(X_base)[keep_cols(Xfit)]
+  yfit <- droplevels(dat$phase[fit_rows])
+  fit <- fit_scmr(Xfit[, cols, drop = FALSE], yfit, model = "global", alpha = alp, lambda = lam,
+                  control = utils::modifyList(control_for("Global-EN"), list(verbose = FALSE)))
+  p0 <- predict(fit, X_base[val_rows, cols, drop = FALSE])
+  tm <- scmr_transition_matrix(dat$phase[fit_rows], dat$id_subsegmen[fit_rows], dat$time[fit_rows], class_levels)
+  yv <- dat$phase[val_rows]
+  tab <- data.frame(Tau = NA_real_, Weight = 0, metric_block(yv, p0, "")[c("LogLoss", "Kappa")])
+  for (tau in hmm_taus) for (w in hmm_weights) {
+    p <- scmr_hmm_smooth(p0, dat$id_subsegmen[val_rows], dat$time[val_rows], tm$transition, tm$prior,
+                         tau = tau, weight = w)
+    tab <- rbind(tab, data.frame(Tau = tau, Weight = w, metric_block(yv, p, "")[c("LogLoss", "Kappa")]))
+  }
+  best <- tab[-1, ][which.min(tab$LogLoss[-1]), ]
+  tuned <- list(tau = best$Tau, weight = best$Weight, table = tab)
+  print(tab, row.names = FALSE, digits = 4)
+  saveRDS(tuned, tfile)
+  tuned
+}
+
+# G with the smallest PLIC-AIC among the DSCMR-EN fits of a split.
+selected_G <- function(design, fold, G_grid) {
+  crit <- vapply(G_grid, function(G) {
+    f <- run_file(design, fold, "DSCMR-EN", G)
+    if (!file.exists(f)) return(NA_real_)
+    v <- readRDS(f)$result$CriterionPLIC_AIC
+    if (is.null(v)) NA_real_ else v[1]
+  }, numeric(1))
+  if (all(is.na(crit))) NA_integer_ else G_grid[which.min(crit)]
+}
+
 run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = NULL) {
   seed <- outer_seed + 100L * fold + match(design, designs_to_run)
   banner(design, " | fold ", fold, " | train rows ", length(train), " | test rows ", length(test))
@@ -462,6 +544,10 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
   old_g <- file.path(reuse_cache_dirs, basename(gfile))
   old_g <- old_g[file.exists(old_g)]
   if (!file.exists(gfile) && length(old_g)) file.copy(old_g[1], gfile)
+  if (membership_level == "segment") for (nm in sprintf("%s_fold%02d_%s.rds", design, fold, c("tuning", "features"))) {
+    old <- file.path(reuse_level_dir, "cache", nm)
+    if (!file.exists(file.path(cache_dir, nm)) && file.exists(old)) file.copy(old, file.path(cache_dir, nm))
+  }
   if (file.exists(gfile)) global <- readRDS(gfile) else {
     cat(sprintf("  [%s] global cross-validation\n", format(Sys.time(), "%H:%M")))
     global <- global_fit(train, seed)
@@ -489,21 +575,29 @@ run_split <- function(design, fold, train, test, modes, G_grid, y_obs_impute = N
       saveRDS(features, ffile)
     }
   }
+  hmm <- NULL
+  if (design == "E2_mapping") {
+    ht <- tune_hmm(design, fold, train, lam, alp, seed, cache_dir)
+    tm <- scmr_transition_matrix(dat$phase[train], dat$id_subsegmen[train], dat$time[train], class_levels)
+    hmm <- c(tm, ht[c("tau", "weight")])
+    cat("  temporal smoothing: tau", hmm$tau, "| weight", hmm$weight, "\n")
+  }
   args <- list(train = train, test = test, seed = seed, global = global, lam = lam, alp = alp,
-               features = features, modes = modes, y_obs_impute = y_obs_impute)
+               features = features, modes = modes, y_obs_impute = y_obs_impute, hmm = hmm)
   do.call(safe_run, c(list(design, fold, "Global-EN", 1L), args))
   for (G in setdiff(G_grid, 1L)) {
     do.call(safe_run, c(list(design, fold, "DSCMR-EN", G), args))
     if (design != "E3_imputation") do.call(safe_run, c(list(design, fold, "TwoStage-EN", G), args))
   }
   if (design == "E2_mapping") {
-    for (G in setdiff(G_grid, 1L)) {
-      do.call(safe_run, c(list(design, fold, "DSCMR-EN-phi1", G), args))
-      do.call(safe_run, c(list(design, fold, "SCMR-EN-static", G), args))
-    }
+    do.call(safe_run, c(list(design, fold, "Global-EN-static", 1L), args))
+    for (G in setdiff(G_grid, 1L)) do.call(safe_run, c(list(design, fold, "SCMR-EN-static", G), args))
+    abl_G <- if (identical(prof$ablation, "all")) setdiff(G_grid, 1L) else setdiff(selected_G(design, fold, G_grid), c(1L, NA))
+    if (length(abl_G)) cat("  phi = 1 ablation at G =", abl_G, "\n")
+    for (G in abl_G) do.call(safe_run, c(list(design, fold, "DSCMR-EN-phi1", G), args))
     if (use_gw) do.call(safe_run, c(list(design, fold, "GW-EN", 0L), args))
     if (use_lightgbm) do.call(safe_run, c(list(design, fold, "LightGBM", 0L), args))
-    if (use_scr_original) for (G in setdiff(G_grid, 1L)) do.call(safe_run, c(list(design, fold, "SCR-original", G), args))
+    if (use_scr_original) for (G in intersect(prof$scr_G, G_grid)) do.call(safe_run, c(list(design, fold, "SCR-original", G), args))
   }
   if (design == "E1_nowcast" && use_lightgbm) do.call(safe_run, c(list(design, fold, "LightGBM", 0L), args))
 }
@@ -585,9 +679,11 @@ if (nrow(results)) {
   utils::write.csv(perf, file.path(output_dir, "performance.csv"), row.names = FALSE)
   print(perf[order(perf$Design, perf$Mode, -perf$TestKappa), ], digits = 3, row.names = FALSE)
   crit <- intersect(c("CriterionPLIC_AIC", "CriterionPLIC_BIC", "CriterionSCR_AIC_effective"), names(results))
-  sc <- results[results$Model %in% c("DSCMR-EN", "Global-EN") & results$Mode %in% c("filter", "lag_observed", "impute"), ]
+  sc <- results[(results$Model %in% c("DSCMR-EN", "Global-EN") & results$Mode %in% c("filter", "lag_observed", "impute")) |
+                  (results$Model %in% c("SCMR-EN-static", "Global-EN-static") & results$Mode == "direct"), ]
+  sc$Mode[sc$Model %in% c("SCMR-EN-static", "Global-EN-static")] <- "static"
   if (length(crit) && nrow(sc)) {
-    cat("\nSelected G (DSCMR-EN grid, Global-EN as G = 1):\n")
+    cat("\nSelected G (DSCMR-EN grid with Global-EN as G = 1; 'static': SCMR-EN-static with Global-EN-static):\n")
     for (cr in crit) for (key in unique(paste(sc$Design, sc$Fold, sc$Mode))) {
       z <- sc[paste(sc$Design, sc$Fold, sc$Mode) == key & is.finite(sc[[cr]]), ]
       if (nrow(z)) cat(sprintf("  %-28s %-30s G = %d\n", cr, key, z$G[which.min(z[[cr]])]))

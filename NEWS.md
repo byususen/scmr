@@ -2,6 +2,11 @@
 
 Dynamic spatially clustered multinomial regression (DSCMR-EN).
 
+- Temporal smoothing of static probabilities by a hybrid HMM:
+  `scmr_transition_matrix()` estimates the phase transition matrix from
+  observed sequences and `scmr_hmm_smooth()` runs the forward(-backward)
+  recursion with scaled emissions (p(y|x) / prior)^tau, optional temperature
+  and a linear pool with the static probabilities.
 - Block-level labels: `scmr_filter_predict()` and `scmr_impute_waves()` take
   `cluster_id`, the spatial unit that carries the cluster label (for example a
   survey segment), while `unit_id` remains the unit whose class sequence is
