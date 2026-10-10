@@ -1,0 +1,58 @@
+Options:
+List of 18
+ $ reps       : int 1
+ $ n_units    : int 60
+ $ n_time     : int 6
+ $ patterns   : chr "global"
+ $ G          : int 3
+ $ delta      : num 1
+ $ out        : chr "/home/runner/work/_temp/pilot_out"
+ $ cores      : int 2
+ $ theory     : logi FALSE
+ $ G_grid     : chr "1,2,3,4,5"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 30
+ $ n_starts   : int 3
+ $ domain     : chr "square"
+ $ smooth_type: chr "linear"
+ $ scr        : logi TRUE
+ $ membership : chr "potts"
+There were 50 or more warnings (use warnings() to see the first 50)
+
+Elapsed: 11.91937 secs 
+
+== Mean metrics at new locations ==
+   Pattern        Model         Mode  Kappa LogLoss TrainARI BetaMSE
+1   global     DSCMR-EN       filter 0.0786   1.750       NA  0.0821
+2   global    Global-EN       filter 0.0786   1.750       NA  0.0821
+3   global        GW-EN       filter 0.0954   1.781       NA  0.0871
+4   global SCR-original       filter 0.1643   2.180       NA  0.3797
+5   global     DSCMR-EN lag_observed 0.6147   0.847       NA  0.0821
+6   global    Global-EN lag_observed 0.6147   0.847       NA  0.0821
+7   global        GW-EN lag_observed 0.5649   0.864       NA  0.0871
+8   global SCR-original lag_observed 0.5479   1.850       NA  0.3797
+9   global     DSCMR-EN       plugin 0.1749   2.659       NA  0.0821
+10  global    Global-EN       plugin 0.1749   2.659       NA  0.0821
+11  global        GW-EN       plugin 0.1437   2.759       NA  0.0871
+12  global SCR-original       plugin 0.0931  12.702       NA  0.3797
+
+== Selected G ==
+PLIC_AIC 
+        
+         1
+  global 1
+PLIC_BIC 
+        
+         1
+  global 1
+SCR_AIC_eff 
+        
+         1
+  global 1
+SCR_orig_BIC 
+        
+         1
+  global 1
+
+DSCMR-EN monotone in every dataset: TRUE 
