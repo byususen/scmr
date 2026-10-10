@@ -1,0 +1,304 @@
+scmr 0.5.0 | profile main | designs E2_mapping,E1_nowcast,E3_imputation | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 36529 | units: 1620 | segments: 180 | satellite predictors: 32 | rows with previous phase: 32847 
+     Regency
+Phase 3205 3212 6171
+    1 2206 1789 2688
+    2 1545 2600 1988
+    3 1733 2452 1991
+    4 1411 2161 1527
+    5 1597 1757 2264
+    6 3649 1434 1737
+
+==== E2_mapping | fold 1 | spec S | train rows 29239 | test rows 7290 ====
+  [14:03] global cross-validation (spec S)
+  [14:04] inner validation of the local penalty (spec S)
+ Multiplier   Lambda LogLoss   Kappa Minutes
+          1 0.005631   1.386 0.30490 0.02345
+          4 0.022523   1.430 0.30378 0.02102
+         16 0.090091   1.628 0.22250 0.01938
+         64 0.360363   1.751 0.08907 0.01890
+  Global-EN alpha 0.9 | lambda.min 0.00222 | local lambda 0.00563 ( lambda.1se x 1 ) | reuse v3c runs: FALSE 
+  [14:04] local coefficient features (spec S)
+  [14:04] start Global-EN-S G=1
+  Global-EN-S        G=1 | direct kappa 0.1681 | 0.0 min
+  [14:04] start SCMR-EN-S G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-S          G=3 | direct kappa 0.3008 | 0.1 min
+  [14:04] start TwoStage-EN-S G=3
+  TwoStage-EN-S      G=3 | direct kappa 0.3008 | 0.0 min
+  [14:04] start SCMR-EN-S G=6
+SCMR G=6 start=1 iteration=1 changes=2
+SCMR G=6 start=1 iteration=2 changes=0
+SCMR G=6 start=2 iteration=1 changes=4
+SCMR G=6 start=2 iteration=2 changes=6
+SCMR G=6 start=2 iteration=3 changes=0
+SCMR G=6 start=3 iteration=1 changes=6
+SCMR G=6 start=3 iteration=2 changes=6
+SCMR G=6 start=3 iteration=3 changes=4
+SCMR G=6 start=3 iteration=4 changes=1
+SCMR G=6 start=3 iteration=5 changes=0
+  SCMR-EN-S          G=6 | direct kappa 0.3015 | 0.2 min
+  [14:04] start TwoStage-EN-S G=6
+  TwoStage-EN-S      G=6 | direct kappa 0.3028 | 0.0 min
+  [14:04] start Regency-EN-S G=3
+  Regency-EN-S       G=3 | direct kappa 0.3008 | 0.0 min
+  PLIC-AIC selects G = 3 for the ablations
+  [14:04] start SCMR-EN-S-phi1 G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-S-phi1     G=3 | direct kappa 0.3008 | 0.1 min
+  [14:04] local coefficient features (spec S, sub-segments)
+  [14:05] start SCMR-EN-S-unit G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-S-unit     G=3 | direct kappa 0.3008 | 0.1 min
+  [14:05] start SCR-original-S G=3
+  SCR-original-S     G=3 | direct kappa 0.3035 | 0.4 min
+  [14:05] start SCR-original-S G=6
+  SCR-original-S     G=6 | direct kappa 0.2955 | 0.5 min
+  [14:06] start GW-EN-S G=0
+  GW-EN-S            G=0 | direct kappa 0.2932 | 1.8 min
+  [14:07] start LightGBM-S G=0
+  LightGBM-S         G=0 | direct kappa 0.2661 | 0.2 min
+There were 50 or more warnings (use warnings() to see the first 50)
+
+==== E1_nowcast | fold 1 | spec D | train rows 24301 | test rows 8546 ====
+  [14:08] global cross-validation (spec D)
+  [14:08] inner validation of the local penalty (spec D)
+ Multiplier  Lambda LogLoss   Kappa Minutes
+          1 0.00492  0.6191 0.71555 0.02462
+          4 0.01968  0.7638 0.68350 0.02135
+         16 0.07872  1.2741 0.50988 0.02320
+         64 0.31488  1.7620 0.07876 0.01728
+  Global-EN alpha 0.9 | lambda.min 0.00147 | local lambda 0.00492 ( lambda.1se x 1 ) | reuse v3c runs: FALSE 
+  [14:08] local coefficient features (spec D)
+  [14:08] start Global-EN-D G=1
+  Global-EN-D        G=1 | lag_observed kappa 0.5038 | 0.0 min
+  [14:08] start SCMR-EN-D G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-D          G=3 | lag_observed kappa 0.7085 | 0.1 min
+  [14:09] start TwoStage-EN-D G=3
+  TwoStage-EN-D      G=3 | lag_observed kappa 0.7085 | 0.0 min
+  [14:09] start SCMR-EN-D G=6
+SCMR G=6 start=1 iteration=1 changes=2
+SCMR G=6 start=1 iteration=2 changes=5
+SCMR G=6 start=1 iteration=3 changes=5
+SCMR G=6 start=1 iteration=4 changes=0
+SCMR G=6 start=2 iteration=1 changes=18
+SCMR G=6 start=2 iteration=2 changes=0
+SCMR G=6 start=3 iteration=1 changes=5
+SCMR G=6 start=3 iteration=2 changes=6
+SCMR G=6 start=3 iteration=3 changes=2
+SCMR G=6 start=3 iteration=4 changes=2
+SCMR G=6 start=3 iteration=5 changes=10
+SCMR G=6 start=3 iteration=6 changes=4
+SCMR G=6 start=3 iteration=7 changes=0
+  SCMR-EN-D          G=6 | lag_observed kappa 0.7048 | 0.4 min
+  [14:09] start TwoStage-EN-D G=6
+  TwoStage-EN-D      G=6 | lag_observed kappa 0.7036 | 0.0 min
+  [14:09] start Regency-EN-D G=3
+  Regency-EN-D       G=3 | lag_observed kappa 0.7085 | 0.0 min
+  PLIC-AIC selects G = 3 for the ablations
+  [14:09] start SCMR-EN-D-phi1 G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-D-phi1     G=3 | lag_observed kappa 0.7085 | 0.1 min
+  [14:09] start SCR-original-D G=3
+  SCR-original-D     G=3 | lag_observed kappa 0.7074 | 0.6 min
+  [14:10] start SCR-original-D G=6
+  SCR-original-D     G=6 | lag_observed kappa 0.7006 | 0.6 min
+  [14:10] start GW-EN-D G=0
+  GW-EN-D            G=0 | lag_observed kappa 0.6951 | 1.9 min
+  [14:12] start LightGBM-D G=0
+  LightGBM-D         G=0 | lag_observed kappa 0.6811 | 0.2 min
+There were 50 or more warnings (use warnings() to see the first 50)
+
+==== E3_imputation | fold 1 | spec D | train rows 23904 | test rows 36529 ====
+  [14:12] global cross-validation (spec D)
+  [14:13] inner validation of the local penalty (spec D)
+ Multiplier   Lambda LogLoss  Kappa Minutes
+          1 0.003435  0.8073 0.6155 0.02592
+          4 0.013738  0.8755 0.6046 0.02227
+         16 0.054953  1.1785 0.5131 0.02392
+         64 0.219811  1.6629 0.2355 0.01720
+  Global-EN alpha 0.9 | lambda.min 0.00135 | local lambda 0.00343 ( lambda.1se x 1 ) | reuse v3c runs: FALSE 
+  [14:13] local coefficient features (spec D)
+  [14:13] start Global-EN-D G=1
+  Global-EN-D        G=1 | impute kappa 0.6143 | 0.0 min
+  [14:13] start SCMR-EN-D G=3
+SCMR G=3 start=1 iteration=1 changes=3
+SCMR G=3 start=1 iteration=2 changes=1
+SCMR G=3 start=1 iteration=3 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-D          G=3 | impute kappa 0.7867 | 0.1 min
+  [14:13] start TwoStage-EN-D G=3
+  TwoStage-EN-D      G=3 | impute kappa 0.7095 | 0.0 min
+  [14:13] start SCMR-EN-D G=6
+SCMR G=6 start=1 iteration=1 changes=8
+SCMR G=6 start=1 iteration=2 changes=1
+SCMR G=6 start=1 iteration=3 changes=0
+SCMR G=6 start=2 iteration=1 changes=10
+SCMR G=6 start=2 iteration=2 changes=0
+SCMR G=6 start=3 iteration=1 changes=1
+SCMR G=6 start=3 iteration=2 changes=0
+  SCMR-EN-D          G=6 | impute kappa 0.7851 | 0.2 min
+  [14:14] start TwoStage-EN-D G=6
+  TwoStage-EN-D      G=6 | impute kappa 0.7814 | 0.0 min
+  PLIC-AIC selects G = 3 for the ablations
+  [14:14] start SCR-original-D G=3
+  SCR-original-D     G=3 | impute kappa 0.7863 | 0.6 min
+  [14:15] start SCR-original-D G=6
+  SCR-original-D     G=6 | impute kappa 0.7762 | 0.6 min
+There were 50 or more warnings (use warnings() to see the first 50)
+
+==== REPORTS ====
+        Design          Model G         Mode TestKappa TestAccuracy TestMacroF1
+    E1_nowcast   Regency-EN-D 3 lag_observed     0.708        0.758       0.756
+    E1_nowcast      SCMR-EN-D 3 lag_observed     0.708        0.758       0.756
+    E1_nowcast SCMR-EN-D-phi1 3 lag_observed     0.708        0.758       0.756
+    E1_nowcast  TwoStage-EN-D 3 lag_observed     0.708        0.758       0.756
+    E1_nowcast SCR-original-D 3 lag_observed     0.707        0.757       0.756
+    E1_nowcast      SCMR-EN-D 6 lag_observed     0.705        0.755       0.753
+    E1_nowcast  TwoStage-EN-D 6 lag_observed     0.704        0.754       0.752
+    E1_nowcast SCR-original-D 6 lag_observed     0.701        0.751       0.750
+    E1_nowcast        GW-EN-D 0 lag_observed     0.695        0.747       0.745
+    E1_nowcast     LightGBM-D 0 lag_observed     0.681        0.735       0.733
+    E1_nowcast    Global-EN-D 1 lag_observed     0.504        0.588       0.583
+    E2_mapping SCR-original-S 3       direct     0.303        0.422       0.414
+    E2_mapping  TwoStage-EN-S 6       direct     0.303        0.422       0.413
+    E2_mapping      SCMR-EN-S 6       direct     0.302        0.421       0.411
+    E2_mapping   Regency-EN-S 3       direct     0.301        0.420       0.411
+    E2_mapping      SCMR-EN-S 3       direct     0.301        0.420       0.411
+    E2_mapping SCMR-EN-S-unit 3       direct     0.301        0.420       0.411
+    E2_mapping SCMR-EN-S-phi1 3       direct     0.301        0.420       0.411
+    E2_mapping  TwoStage-EN-S 3       direct     0.301        0.420       0.411
+    E2_mapping SCR-original-S 6       direct     0.295        0.416       0.407
+    E2_mapping        GW-EN-S 0       direct     0.293        0.414       0.404
+    E2_mapping     LightGBM-S 0       direct     0.266        0.392       0.382
+    E2_mapping    Global-EN-S 1       direct     0.168        0.315       0.281
+ E3_imputation      SCMR-EN-D 3       impute     0.787        0.823       0.821
+ E3_imputation SCR-original-D 3       impute     0.786        0.822       0.821
+ E3_imputation      SCMR-EN-D 6       impute     0.785        0.821       0.820
+ E3_imputation  TwoStage-EN-D 6       impute     0.781        0.818       0.817
+ E3_imputation SCR-original-D 6       impute     0.776        0.814       0.812
+ E3_imputation  TwoStage-EN-D 3       impute     0.710        0.758       0.757
+ E3_imputation    Global-EN-D 1       impute     0.614        0.679       0.676
+ E3_imputation   CarryForward 0       impute     0.286        0.406       0.402
+ TestLogLoss
+       0.625
+       0.625
+       0.625
+       0.625
+       0.616
+       0.631
+       0.630
+       0.634
+       0.642
+       0.721
+       1.006
+       1.405
+       1.402
+       1.404
+       1.399
+       1.399
+       1.399
+       1.399
+       1.399
+       1.418
+       1.414
+       1.480
+       1.646
+       0.452
+       0.452
+       0.460
+       0.460
+       0.472
+       0.621
+       0.802
+       3.393
+
+Methods with their own G (mean over folds):
+        Design         Mode          Model       Choice TestKappa TestMacroF1
+    E1_nowcast lag_observed   Regency-EN-D        fixed     0.708       0.756
+    E1_nowcast lag_observed      SCMR-EN-D     PLIC-AIC     0.708       0.756
+    E1_nowcast lag_observed SCMR-EN-D-phi1        fixed     0.708       0.756
+    E1_nowcast lag_observed  TwoStage-EN-D G of SCMR-EN     0.708       0.756
+    E1_nowcast lag_observed SCR-original-D      SCR BIC     0.707       0.756
+    E1_nowcast lag_observed        GW-EN-D        fixed     0.695       0.745
+    E1_nowcast lag_observed     LightGBM-D        fixed     0.681       0.733
+    E1_nowcast lag_observed    Global-EN-D        fixed     0.504       0.583
+    E2_mapping       direct SCR-original-S      SCR BIC     0.303       0.414
+    E2_mapping       direct   Regency-EN-S        fixed     0.301       0.411
+    E2_mapping       direct      SCMR-EN-S     PLIC-AIC     0.301       0.411
+    E2_mapping       direct SCMR-EN-S-unit        fixed     0.301       0.411
+    E2_mapping       direct SCMR-EN-S-phi1        fixed     0.301       0.411
+    E2_mapping       direct  TwoStage-EN-S G of SCMR-EN     0.301       0.411
+    E2_mapping       direct        GW-EN-S        fixed     0.293       0.404
+    E2_mapping       direct     LightGBM-S        fixed     0.266       0.382
+    E2_mapping       direct    Global-EN-S        fixed     0.168       0.281
+ E3_imputation       impute      SCMR-EN-D     PLIC-AIC     0.787       0.821
+ E3_imputation       impute SCR-original-D      SCR BIC     0.786       0.821
+ E3_imputation       impute  TwoStage-EN-D G of SCMR-EN     0.710       0.757
+ E3_imputation       impute    Global-EN-D        fixed     0.614       0.676
+ E3_imputation       impute   CarryForward        fixed     0.286       0.402
+ TestLogLoss Folds
+       0.625     1
+       0.625     1
+       0.625     1
+       0.625     1
+       0.616     1
+       0.642     1
+       0.721     1
+       1.006     1
+       1.405     1
+       1.399     1
+       1.399     1
+       1.399     1
+       1.399     1
+       1.399     1
+       1.414     1
+       1.480     1
+       1.646     1
+       0.452     1
+       0.452     1
+       0.621     1
+       0.802     1
+       3.393     1
+
+Paired difference to Global-EN (mean over folds, SE across folds):
+        Design          Model Folds  dKappa SE_dKappa dLogLoss SE_dLogLoss
+    E1_nowcast   Regency-EN-D     1  0.2047        NA   -0.381          NA
+    E1_nowcast      SCMR-EN-D     1  0.2047        NA   -0.381          NA
+    E1_nowcast SCMR-EN-D-phi1     1  0.2047        NA   -0.381          NA
+    E1_nowcast  TwoStage-EN-D     1  0.2047        NA   -0.381          NA
+    E1_nowcast SCR-original-D     1  0.2036        NA   -0.390          NA
+    E1_nowcast        GW-EN-D     1  0.1913        NA   -0.365          NA
+    E1_nowcast     LightGBM-D     1  0.1773        NA   -0.285          NA
+    E1_nowcast    Global-EN-D     1  0.0000        NA    0.000          NA
+    E2_mapping SCR-original-S     1  0.1353        NA   -0.241          NA
+    E2_mapping   Regency-EN-S     1  0.1326        NA   -0.247          NA
+    E2_mapping      SCMR-EN-S     1  0.1326        NA   -0.247          NA
+    E2_mapping SCMR-EN-S-unit     1  0.1326        NA   -0.247          NA
+    E2_mapping SCMR-EN-S-phi1     1  0.1326        NA   -0.247          NA
+    E2_mapping  TwoStage-EN-S     1  0.1326        NA   -0.247          NA
+    E2_mapping        GW-EN-S     1  0.1250        NA   -0.232          NA
+    E2_mapping     LightGBM-S     1  0.0979        NA   -0.166          NA
+    E2_mapping    Global-EN-S     1  0.0000        NA    0.000          NA
+ E3_imputation      SCMR-EN-D     1  0.1724        NA   -0.350          NA
+ E3_imputation SCR-original-D     1  0.1720        NA   -0.350          NA
+ E3_imputation  TwoStage-EN-D     1  0.0952        NA   -0.181          NA
+ E3_imputation    Global-EN-D     1  0.0000        NA    0.000          NA
+ E3_imputation   CarryForward     1 -0.3281        NA    2.591          NA
+
+==== DONE ====
+Outputs in: /home/runner/work/_temp/emp_out | failed runs: 0 
