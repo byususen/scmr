@@ -1,0 +1,1 @@
+exp=S1 spec=static pattern=grid reps=25 rep_start=1

@@ -1,0 +1,75 @@
+Options:
+List of 23
+ $ exp        : chr "S1"
+ $ spec       : chr "static"
+ $ pattern    : chr "grid"
+ $ reps       : int 25
+ $ rep_start  : int 1
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 150
+ $ n_time     : int 12
+ $ block_size : int 1
+ $ G          : int 3
+ $ delta      : num 1
+ $ G_grid     : chr "1,2,3,4,5,6,7,8"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi TRUE
+ $ gw         : logi TRUE
+ $ unit_labels: logi FALSE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+               Model Kappa LogLoss UnitARI  BetaMSE   Phi    G Seconds
+1          Global-EN 0.243    1.48      NA 7.99e-01    NA 1.00   2.090
+2              GW-EN 0.429    1.21      NA 4.84e-01    NA   NA   6.193
+3            SCMR-EN 0.474    1.12   0.952 3.18e-01 0.943 6.12   7.829
+4       SCMR-EN-phi1 0.467    1.13   0.931 3.33e-01 1.000 6.00   6.794
+5      SCMR-EN@trueG 0.474    1.12   0.951 3.23e-01 0.933 6.00   7.588
+6       SCR-original 0.246    1.49      NA 7.56e-01 1.000 1.00   0.367
+7 SCR-original@trueG 0.402    1.39   0.749 3.74e+08 1.000 6.00   0.806
+8   TCMR-EN (oracle) 0.513    1.04      NA 2.97e-01 1.000 6.00   0.697
+9        TwoStage-EN 0.397    1.26   0.624 5.15e-01 1.000 6.00   0.935
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Errors ==
+      Rep            Model
+1.41    5 TCMR-EN (oracle)
+1.50    6 TCMR-EN (oracle)
+1.113  13 TCMR-EN (oracle)
+1.176  20 TCMR-EN (oracle)
+1.185  21 TCMR-EN (oracle)
+                                                       Error
+1.41  Fixed clusters do not satisfy min_units/min_per_class.
+1.50  Fixed clusters do not satisfy min_units/min_per_class.
+1.113 Fixed clusters do not satisfy min_units/min_per_class.
+1.176 Fixed clusters do not satisfy min_units/min_per_class.
+1.185 Fixed clusters do not satisfy min_units/min_per_class.
+
+== Selected G (true G = 6 ) ==
+  PLIC_AIC     
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  0  1 22  0  2 
+  PLIC_BIC     
+1 2 3 4 5 6 7 8 
+1 5 9 5 4 1 0 0 
+  SCR_AIC_eff  
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  0  1 21  0  3 
+  SCR_BIC_eff  
+1 2 3 4 5 6 7 8 
+0 4 9 6 5 1 0 0 
+  CB_BIC       
+ 1  2  3  4  5  6  7  8 
+ 0  0  0  0  3 17  3  2 
+  SCR_BIC_orig 
+ 1  2  3  4  5  6  7  8 
+25  0  0  0  0  0  0  0 
+
+Elapsed: 7.960248 mins 
