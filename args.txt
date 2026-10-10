@@ -1,0 +1,1 @@
+exp=S4 spec=static pattern=irregular block_size=9 n_units=100 n_time=4 unit_labels=TRUE reps=1 G_grid=1,3
