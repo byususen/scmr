@@ -1,0 +1,198 @@
+scmr 0.5.0 | profile main | membership level segment | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 36529 | units: 1620 | segments: 180 | satellite predictors: 32 | rows with previous phase: 32847 
+     Regency
+Phase 3205 3212 6171
+    1 2206 1789 2688
+    2 1545 2600 1988
+    3 1733 2452 1991
+    4 1411 2161 1527
+    5 1597 1757 2264
+    6 3649 1434 1737
+
+==== E2_mapping | fold 1 | train rows 26311 | test rows 7290 ====
+  [13:37] global cross-validation
+  [13:37] inner validation of the local penalty and membership rule
+ Multiplier   Lambda       Rule FilterLogLoss FilterKappa
+          1 0.004435 proportion         1.177     0.42679
+          1 0.004435      potts         1.177     0.42679
+          4 0.017741 proportion         1.277     0.40435
+          4 0.017741      potts         1.277     0.40394
+         16 0.070963 proportion         1.555     0.26815
+         16 0.070963      potts         1.556     0.26815
+         64 0.283853 proportion         1.752     0.08907
+         64 0.283853      potts         1.752     0.08907
+ TrainPenalizedObjective Minutes
+                  -15180 0.02985
+                  -15180 0.03955
+                  -21541 0.02752
+                  -21541 0.03727
+                  -32174 0.02490
+                  -32174 0.03458
+                  -36402 0.02425
+                  -36402 0.03418
+  Global-EN alpha 0.9 | lambda.min 0.00132 | local lambda 0.00444 ( lambda.1se x 1 ) | new-location membership proportion 
+  [13:37] local coefficient features
+  [13:38] inner validation of the temporal smoothing
+  Tau Weight LogLoss  Kappa
+   NA   0.00   1.653 0.1498
+ 0.50   0.25   1.649 0.1598
+ 0.50   0.50   1.651 0.1639
+ 0.50   0.75   1.658 0.1736
+ 0.50   1.00   1.671 0.1616
+ 0.75   0.25   1.643 0.1619
+ 0.75   0.50   1.640 0.1693
+ 0.75   0.75   1.641 0.1697
+ 0.75   1.00   1.648 0.1672
+ 1.00   0.25   1.640 0.1617
+ 1.00   0.50   1.634 0.1718
+ 1.00   0.75   1.636 0.1729
+ 1.00   1.00   1.646 0.1729
+  temporal smoothing: tau 1 | weight 0.5 
+  [13:38] start Global-EN G=1
+  Global-EN       G=1 | lag_observed kappa 0.5047 | 0.0 min
+  [13:38] start DSCMR-EN G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  DSCMR-EN        G=3 | lag_observed kappa 0.7134 | 0.1 min
+  [13:38] start TwoStage-EN G=3
+  TwoStage-EN     G=3 | lag_observed kappa 0.7134 | 0.0 min
+  [13:38] start DSCMR-EN G=6
+SCMR G=6 start=1 iteration=1 changes=2
+SCMR G=6 start=1 iteration=2 changes=6
+SCMR G=6 start=1 iteration=3 changes=1
+SCMR G=6 start=1 iteration=4 changes=0
+SCMR G=6 start=2 iteration=1 changes=5
+SCMR G=6 start=2 iteration=2 changes=0
+SCMR G=6 start=3 iteration=1 changes=14
+SCMR G=6 start=3 iteration=2 changes=3
+SCMR G=6 start=3 iteration=3 changes=0
+  DSCMR-EN        G=6 | lag_observed kappa 0.7133 | 0.2 min
+  [13:38] start TwoStage-EN G=6
+  TwoStage-EN     G=6 | lag_observed kappa 0.7101 | 0.0 min
+  [13:38] start Global-EN-static G=1
+  Global-EN-static G=1 | direct kappa 0.1680 | 0.3 min
+  [13:38] start SCMR-EN-static G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  SCMR-EN-static  G=3 | direct kappa 0.3019 | 0.1 min
+  [13:39] start SCMR-EN-static G=6
+SCMR G=6 start=1 iteration=1 changes=1
+SCMR G=6 start=1 iteration=2 changes=0
+SCMR G=6 start=2 iteration=1 changes=3
+SCMR G=6 start=2 iteration=2 changes=0
+SCMR G=6 start=3 iteration=1 changes=1
+SCMR G=6 start=3 iteration=2 changes=0
+  SCMR-EN-static  G=6 | direct kappa 0.3036 | 0.2 min
+  phi = 1 ablation at G = 3 
+  [13:39] start DSCMR-EN-phi1 G=3
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+SCMR G=3 start=3 iteration=1 changes=0
+  DSCMR-EN-phi1   G=3 | lag_observed kappa 0.7134 | 0.1 min
+  [13:39] start LightGBM G=0
+  LightGBM        G=0 | lag_observed kappa 0.4835 | 0.1 min
+  [13:39] start SCR-original G=3
+  SCR-original    G=3 | lag_observed kappa 0.7065 | 0.4 min
+  [13:39] start SCR-original G=6
+  SCR-original    G=6 | lag_observed kappa 0.7043 | 0.4 min
+There were 50 or more warnings (use warnings() to see the first 50)
+
+==== REPORTS ====
+     Design            Model G          Mode TestKappa TestAccuracy TestMacroF1
+ E2_mapping   SCMR-EN-static 6        direct     0.304        0.423       0.413
+ E2_mapping   SCMR-EN-static 3        direct     0.302        0.421       0.412
+ E2_mapping Global-EN-static 1        direct     0.168        0.315       0.279
+ E2_mapping         DSCMR-EN 3        filter     0.426        0.524       0.519
+ E2_mapping    DSCMR-EN-phi1 3        filter     0.426        0.524       0.519
+ E2_mapping      TwoStage-EN 3        filter     0.426        0.524       0.519
+ E2_mapping         DSCMR-EN 6        filter     0.424        0.523       0.517
+ E2_mapping      TwoStage-EN 6        filter     0.420        0.519       0.514
+ E2_mapping     SCR-original 3        filter     0.413        0.513       0.509
+ E2_mapping     SCR-original 6        filter     0.410        0.511       0.507
+ E2_mapping        Global-EN 1        filter     0.198        0.338       0.318
+ E2_mapping         LightGBM 0        filter     0.177        0.320       0.304
+ E2_mapping         DSCMR-EN 3  lag_observed     0.713        0.762       0.760
+ E2_mapping    DSCMR-EN-phi1 3  lag_observed     0.713        0.762       0.760
+ E2_mapping      TwoStage-EN 3  lag_observed     0.713        0.762       0.760
+ E2_mapping         DSCMR-EN 6  lag_observed     0.713        0.762       0.760
+ E2_mapping      TwoStage-EN 6  lag_observed     0.710        0.759       0.757
+ E2_mapping     SCR-original 3  lag_observed     0.706        0.756       0.754
+ E2_mapping     SCR-original 6  lag_observed     0.704        0.754       0.752
+ E2_mapping        Global-EN 1  lag_observed     0.505        0.589       0.582
+ E2_mapping         LightGBM 0  lag_observed     0.483        0.571       0.565
+ E2_mapping     SCR-original 6        plugin     0.310        0.432       0.422
+ E2_mapping     SCR-original 3        plugin     0.310        0.431       0.422
+ E2_mapping         DSCMR-EN 6        plugin     0.303        0.426       0.414
+ E2_mapping         DSCMR-EN 3        plugin     0.293        0.418       0.406
+ E2_mapping    DSCMR-EN-phi1 3        plugin     0.293        0.418       0.406
+ E2_mapping      TwoStage-EN 3        plugin     0.293        0.418       0.406
+ E2_mapping      TwoStage-EN 6        plugin     0.285        0.412       0.399
+ E2_mapping         LightGBM 0        plugin     0.111        0.268       0.248
+ E2_mapping        Global-EN 1        plugin     0.108        0.267       0.238
+ E2_mapping   SCMR-EN-static 3        smooth     0.350        0.461       0.455
+ E2_mapping   SCMR-EN-static 6        smooth     0.344        0.456       0.449
+ E2_mapping Global-EN-static 1        smooth     0.178        0.323       0.297
+ E2_mapping   SCMR-EN-static 3 smooth_filter     0.368        0.476       0.468
+ E2_mapping   SCMR-EN-static 6 smooth_filter     0.368        0.476       0.468
+ E2_mapping Global-EN-static 1 smooth_filter     0.194        0.336       0.307
+ E2_mapping   SCMR-EN-static 6   smooth_pure     0.337        0.450       0.444
+ E2_mapping   SCMR-EN-static 3   smooth_pure     0.337        0.450       0.444
+ E2_mapping Global-EN-static 1   smooth_pure     0.171        0.315       0.297
+ TestLogLoss
+       1.401
+       1.398
+       1.647
+       1.188
+       1.188
+       1.188
+       1.187
+       1.192
+       1.180
+       1.197
+       1.595
+       1.653
+       0.616
+       0.616
+       0.616
+       0.621
+       0.618
+       0.607
+       0.617
+       1.002
+       1.036
+       2.555
+       2.451
+       2.028
+       2.024
+       2.024
+       2.024
+       2.037
+       2.963
+       2.404
+       1.349
+       1.351
+       1.625
+       1.318
+       1.320
+       1.617
+       1.389
+       1.386
+       1.636
+
+Selected G (DSCMR-EN grid with Global-EN as G = 1; 'static': SCMR-EN-static with Global-EN-static):
+  CriterionPLIC_AIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_AIC            E2_mapping 1 filter            G = 3
+  CriterionPLIC_AIC            E2_mapping 1 static            G = 3
+  CriterionPLIC_BIC            E2_mapping 1 lag_observed      G = 3
+  CriterionPLIC_BIC            E2_mapping 1 filter            G = 3
+  CriterionPLIC_BIC            E2_mapping 1 static            G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 lag_observed      G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 filter            G = 3
+  CriterionSCR_AIC_effective   E2_mapping 1 static            G = 3
+
+==== DONE ====
+Outputs in: /home/runner/work/_temp/emp_out | failed runs: 0 
