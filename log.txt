@@ -1,0 +1,67 @@
+Options:
+List of 23
+ $ exp        : chr "S1"
+ $ spec       : chr "static"
+ $ pattern    : chr "irregular"
+ $ reps       : int 25
+ $ rep_start  : int 1
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 150
+ $ n_time     : int 12
+ $ block_size : int 1
+ $ G          : int 3
+ $ delta      : num 1
+ $ G_grid     : chr "1,2,3,4,5,6,7,8"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi TRUE
+ $ gw         : logi TRUE
+ $ unit_labels: logi FALSE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+               Model Kappa LogLoss UnitARI BetaMSE   Phi    G Seconds
+1          Global-EN 0.305   1.395      NA   0.657    NA 1.00   3.236
+2              GW-EN 0.399   1.266      NA   0.466    NA   NA   9.986
+3            SCMR-EN 0.483   1.094  0.9923   0.222 0.691 3.00   8.142
+4       SCMR-EN-phi1 0.476   1.103  0.9614   0.232 1.000 3.00   7.099
+5      SCMR-EN@trueG 0.483   1.094  0.9923   0.222 0.691 3.00   8.142
+6       SCR-original 0.383   1.274      NA  21.776 1.000 1.88   1.203
+7 SCR-original@trueG 0.400   1.264  0.5552   0.676 1.000 3.00   1.686
+8   TCMR-EN (oracle) 0.535   0.994      NA   0.210 1.000 3.00   0.595
+9        TwoStage-EN 0.300   1.398  0.0641   0.666 1.000 3.00   0.589
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Errors ==
+      Rep            Model
+1.176  20 TCMR-EN (oracle)
+                                                       Error
+1.176 Fixed clusters do not satisfy min_units/min_per_class.
+
+== Selected G (true G = 3 ) ==
+  PLIC_AIC     
+ 1  2  3  4  5  6  7  8 
+ 0  0 25  0  0  0  0  0 
+  PLIC_BIC     
+ 1  2  3  4  5  6  7  8 
+ 0  1 24  0  0  0  0  0 
+  SCR_AIC_eff  
+ 1  2  3  4  5  6  7  8 
+ 0  0 23  2  0  0  0  0 
+  SCR_BIC_eff  
+ 1  2  3  4  5  6  7  8 
+ 0  1 24  0  0  0  0  0 
+  CB_BIC       
+ 1  2  3  4  5  6  7  8 
+ 0  0 22  3  0  0  0  0 
+  SCR_BIC_orig 
+ 1  2  3  4  5  6  7  8 
+14  2  7  2  0  0  0  0 
+
+Elapsed: 13.2144 mins 
