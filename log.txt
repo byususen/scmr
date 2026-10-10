@@ -1,0 +1,57 @@
+Options:
+List of 23
+ $ exp        : chr "S1"
+ $ spec       : chr "dynamic"
+ $ pattern    : chr "smooth"
+ $ reps       : int 1
+ $ rep_start  : int 1
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 150
+ $ n_time     : int 12
+ $ block_size : int 1
+ $ G          : int 3
+ $ delta      : num 1
+ $ G_grid     : chr "1,3"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi TRUE
+ $ gw         : logi TRUE
+ $ unit_labels: logi FALSE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+         Model Kappa LogLoss UnitARI BetaMSE Phi  G Seconds
+1    Global-EN 0.606   0.837      NA   0.441  NA  1   1.710
+2        GW-EN 0.602   0.789      NA   0.371  NA NA   5.099
+3      SCMR-EN 0.606   0.837      NA   0.441  NA  1   1.710
+4 SCR-original 0.585   0.991      NA   0.372   1  1   0.317
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Selected G (true G = NA ) ==
+  PLIC_AIC     
+1 3 
+1 0 
+  PLIC_BIC     
+1 3 
+1 0 
+  SCR_AIC_eff  
+1 3 
+1 0 
+  SCR_BIC_eff  
+1 3 
+1 0 
+  CB_BIC       
+1 3 
+1 0 
+  SCR_BIC_orig 
+1 3 
+1 0 
+There were 50 or more warnings (use warnings() to see the first 50)
+
+Elapsed: 12.04801 secs 
