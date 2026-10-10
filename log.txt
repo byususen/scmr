@@ -1,0 +1,62 @@
+Options:
+List of 23
+ $ exp        : chr "S4"
+ $ spec       : chr "static"
+ $ pattern    : chr "irregular"
+ $ reps       : int 25
+ $ rep_start  : int 26
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 100
+ $ n_time     : int 4
+ $ block_size : int 9
+ $ G          : int 3
+ $ delta      : num 0.5
+ $ G_grid     : chr "1,2,3,4,5,6"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi TRUE
+ $ gw         : logi TRUE
+ $ unit_labels: logi TRUE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+                Model Kappa LogLoss UnitARI BetaMSE   Phi    G Seconds
+1           Global-EN 0.315    1.36      NA  0.1628    NA 1.00   3.842
+2               GW-EN 0.352    1.31      NA  0.1175    NA   NA  10.605
+3             SCMR-EN 0.390    1.24  0.9836  0.0491 0.719 3.08   5.767
+4        SCMR-EN-phi1 0.390    1.24  0.9796  0.0504 1.000 3.00   5.215
+5  SCMR-EN-unitlabels 0.372    1.28  0.7139  0.0819 3.376 3.00   7.825
+6       SCMR-EN@trueG 0.391    1.24  0.9928  0.0495 0.708 3.00   5.534
+7        SCR-original 0.335    1.34      NA  0.1181 1.000 1.36   1.130
+8  SCR-original@trueG 0.363    1.29  0.6154  0.0687 1.000 3.00   2.367
+9    TCMR-EN (oracle) 0.418    1.20      NA  0.0489 1.000 3.00   0.573
+10        TwoStage-EN 0.315    1.36  0.0887  0.1725 1.000 3.00   0.593
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Selected G (true G = 3 ) ==
+  PLIC_AIC     
+ 1  2  3  4  5  6 
+ 0  0 23  2  0  0 
+  PLIC_BIC     
+ 1  2  3  4  5  6 
+ 3  9 13  0  0  0 
+  SCR_AIC_eff  
+ 1  2  3  4  5  6 
+ 0  0 22  3  0  0 
+  SCR_BIC_eff  
+ 1  2  3  4  5  6 
+ 0 11 14  0  0  0 
+  CB_BIC       
+ 1  2  3  4  5  6 
+ 0  0 18  1  4  2 
+  SCR_BIC_orig 
+ 1  2  3  4  5  6 
+20  1  4  0  0  0 
+
+Elapsed: 8.489858 mins 
