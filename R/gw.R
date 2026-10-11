@@ -3,7 +3,8 @@
 # At anchor units a multinomial elastic net is fitted with bisquare kernel
 # weights over the k nearest units (adaptive bandwidth). A unit is predicted by
 # the model of its nearest anchor. k is chosen by held-out log-loss over whole
-# units; lambda is the global cross-validated value unless supplied.
+# units, jointly with lambda when a lambda grid is supplied; lambda is otherwise
+# the global cross-validated value.
 
 gw_bisquare <- function(d, h) ifelse(d < h, (1 - (d / h)^2)^2, 0)
 
@@ -51,14 +52,18 @@ gw_fit_anchors <- function(z, xraw, y, rows, ucoords, anchor_idx, k, alpha, lamb
 #' @param alpha Elastic-net mixing parameter.
 #' @param lambda Fixed glmnet lambda; by default the global `cv.glmnet`
 #'   `lambda.min` for `alpha`.
+#' @param lambda_grid Optional candidate lambdas; when supplied, the bandwidth
+#'   and lambda are chosen jointly by held-out log-loss (`lambda` is ignored).
 #' @param anchors Maximum number of anchor units with a local fit.
+#' @param tune_anchors Maximum number of anchors used while tuning.
 #' @param val_prop Share of units held out to choose the bandwidth.
 #' @param type_multinomial Passed to glmnet.
 #' @return An object of class `scmr_gw`.
 #' @export
 fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 200),
                                alpha = 0.5, lambda = NULL, anchors = 300, val_prop = 0.2,
-                               type_multinomial = "ungrouped", seed = 123) {
+                               type_multinomial = "ungrouped", seed = 123, lambda_grid = NULL,
+                               tune_anchors = 100) {
   data <- prepare_scmr_data(x, y, unit_id, coords)
   classes <- levels(data$y)
   pre <- make_pre_transform(data$x)
@@ -68,7 +73,7 @@ fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 20
   ucoords <- get_unit_coords(data$unit_id, data$coords)
   rows <- split(seq_len(nrow(z)), factor(data$unit_id, levels = units))
   with_scmr_seed(seed, {
-    if (is.null(lambda)) {
+    if (is.null(lambda) && is.null(lambda_grid)) {
       cv <- glmnet::cv.glmnet(glmnet_design(z), data$y, family = "multinomial", alpha = alpha,
                               foldid = make_stratified_foldid(data$y, 5, scmr_seed(seed, 11)),
                               standardize = FALSE, type.multinomial = type_multinomial)
@@ -79,13 +84,17 @@ fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 20
     # Bandwidth by held-out log-loss over whole units.
     val_u <- sort(sample.int(m, max(1L, floor(val_prop * m))))
     fit_u <- setdiff(seq_len(m), val_u)
-    trace <- data.frame(k = k_grid, LogLoss = NA_real_)
-    if (length(k_grid) > 1L) {
+    lam_grid <- if (is.null(lambda_grid)) lambda else sort(unique(lambda_grid))
+    trace <- expand.grid(k = k_grid, lambda = lam_grid)
+    trace$LogLoss <- NA_real_
+    if (nrow(trace) > 1L) {
       sub_rows <- rows[fit_u]
-      sub_anchor <- pick_anchors(seq_along(fit_u))
-      for (j in seq_along(k_grid)) {
+      pool <- seq_along(fit_u)
+      n_tune <- min(anchors, tune_anchors)
+      sub_anchor <- if (length(pool) <= n_tune) pool else sort(sample(pool, n_tune))
+      for (j in seq_len(nrow(trace))) {
         engines <- gw_fit_anchors(z, data$x, data$y, sub_rows, ucoords[fit_u, , drop = FALSE], sub_anchor,
-                                  k_grid[j], alpha, lambda, classes, type_multinomial, pre, control)
+                                  trace$k[j], alpha, trace$lambda[j], classes, type_multinomial, pre, control)
         ok <- !vapply(engines, is.null, logical(1))
         if (!any(ok)) next
         ac <- ucoords[fit_u[sub_anchor[ok]], , drop = FALSE]
@@ -100,9 +109,12 @@ fit_gw_multinom_en <- function(x, y, unit_id, coords, k_grid = c(25, 50, 100, 20
         }
         trace$LogLoss[j] <- -ll / nn
       }
-      k_best <- k_grid[which.min(replace(trace$LogLoss, is.na(trace$LogLoss), Inf))]
+      best <- which.min(replace(trace$LogLoss, is.na(trace$LogLoss), Inf))
+      k_best <- trace$k[best]
+      lambda <- trace$lambda[best]
     } else {
-      k_best <- k_grid
+      k_best <- trace$k[1]
+      lambda <- trace$lambda[1]
     }
     anchor_idx <- pick_anchors(seq_len(m))
     engines <- gw_fit_anchors(z, data$x, data$y, rows, ucoords, anchor_idx, k_best, alpha, lambda,

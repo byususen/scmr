@@ -198,10 +198,16 @@ scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, la
       if (Tn > 1) for (t in (Tn - 1):1) {
         if (restart[t + 1]) { b[t, ] <- 1; next }
         v <- as.numeric(crossprod(trans[[g]][idx[t + 1], , ], evidence(idx[t + 1]) * b[t + 1, ]))
-        b[t, ] <- v / max(sum(v), .Machine$double.xmin)
+        sv <- sum(v)
+        # A later observation that is impossible under regime g carries no
+        # usable backward information; its likelihood already enters loglik.
+        b[t, ] <- if (is.finite(sv) && sv > 0) v / sv else rep(1, C)
       }
       m <- f * b
-      marg[[g]] <- m / rowSums(m)
+      rs <- rowSums(m)
+      bad <- !is.finite(rs) | rs <= 0
+      if (any(bad)) { m[bad, ] <- f[bad, , drop = FALSE]; rs[bad] <- rowSums(f[bad, , drop = FALSE]) }
+      marg[[g]] <- m / rs
       loglik_ug[u, g] <- loglik
     }
     marg_u[[u]] <- marg
@@ -213,8 +219,9 @@ scmr_impute_waves <- function(fit, newx, y, unit_id, time, new_coords = NULL, la
     us <- which(block == bk)
     w0 <- pp[seqs[[us[1]]][1], ]
     logw <- ifelse(w0 > 0, log(w0), -Inf) + colSums(loglik_ug[us, , drop = FALSE])
-    r <- exp(logw - max(logw))
-    r <- r / sum(r)
+    r <- if (any(is.finite(logw))) exp(logw - max(logw[is.finite(logw)])) else w0
+    r[!is.finite(r)] <- 0
+    r <- if (sum(r) > 0) r / sum(r) else w0 / sum(w0)
     for (j in us) {
       post_g[j, ] <- r
       idx <- seqs[[j]]

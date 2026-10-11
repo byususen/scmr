@@ -25,7 +25,8 @@
 #   TwoStage-EN   k-means of segment centroids, no label updates
 #   Regency-EN    one model per regency (administrative strata)
 #   SCR-original  port of the SCR reference code (unpenalized, phi = 1, BIC)
-#   GW-EN         geographically weighted multinomial EN
+#   GW-EN         geographically weighted multinomial EN (bandwidth and penalty
+#                 chosen jointly by held-out log-loss)
 #   LightGBM      gradient boosting with the same features plus coordinates
 #   ablations at the G chosen by PLIC-AIC: SCMR-EN-<spec>-phi1 (phi fixed at 1)
 #   and SCMR-EN-S-unit (labels per sub-segment instead of per segment)
@@ -287,8 +288,11 @@ run_model <- function(design, fold, model, G, ctx) {
   fit <- switch(fam,
     "Global-EN" = sc$global,
     "LightGBM" = fit_lightgbm(cbind(Xtr, XY[train, ]), ytr, seed),
+    # GW-EN chooses its bandwidth and penalty jointly by held-out log-loss over
+    # the same multiplier grid (local fits on k neighbours separate easily).
     "GW-EN" = fit_gw_multinom_en(Xtr, ytr, sub_id[train], coords_all[train, ], k_grid = prof$gw_k,
-                                 alpha = sc$alpha, lambda = sc$lambda, anchors = prof$gw_anchors, seed = seed),
+                                 alpha = sc$alpha, lambda_grid = sc$lambda_base * tune_multipliers,
+                                 anchors = prof$gw_anchors, tune_anchors = 100L, seed = seed),
     "SCR-original" = fit_scr_original(Xtr, ytr, seg_id[train], seg_xy[train, ], G = G, phi = 1,
                                       k_neighbors = 5, maxitr = scr_maxitr, seed = seed),
     "Regency-EN" = fit_scmr(Xtr, ytr, model = "fixed_clusters", cluster = dat$regency[train],
@@ -464,7 +468,8 @@ run_split <- function(design, fold, train, test, spec, mode, G_grid, y_obs = NUL
       "(", local_lambda_rule, "x", tuned$multiplier, ") | reuse v3c runs:", v3c_ok, "\n")
   features <- if (any(G_grid > 1L)) local_features(design, fold, spec, train, global, seed) else NULL
   ctx <- list(train = train, test = test, seed = seed, mode = mode, y_obs = y_obs, v3c_ok = v3c_ok, spec = list())
-  ctx$spec[[spec]] <- list(global = global, alpha = alp, lambda = lam, features = features, features_unit = NULL)
+  ctx$spec[[spec]] <- list(global = global, alpha = alp, lambda = lam, lambda_base = lam_base, features = features,
+                           features_unit = NULL)
   M <- function(f, v = "") paste0(f, "-", spec, if (nzchar(v)) paste0("-", v) else "")
   run <- function(model, G) safe_run(design, fold, model, G, ctx)
   run(M("Global-EN"), 1L)

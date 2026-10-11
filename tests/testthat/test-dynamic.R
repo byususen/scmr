@@ -149,6 +149,10 @@ test_that("panel generator, block folds and GW comparator behave", {
   p <- predict(gw, cbind(sim$x, sim$lag_x)[1:20, ], sim$coords[1:20, ])
   expect_equal(rowSums(p), rep(1, 20), tolerance = 1e-10, ignore_attr = TRUE)
   expect_true(gw$k %in% c(20, 40))
+  gw2 <- fit_gw_multinom_en(cbind(sim$x, sim$lag_x), sim$y, sim$unit_id, sim$coords,
+                            k_grid = c(20, 40), anchors = 15, seed = 2, lambda_grid = c(0.001, 0.01, 0.1))
+  expect_true(gw2$lambda %in% c(0.001, 0.01, 0.1))
+  expect_equal(nrow(gw2$k_trace), 6L)
 })
 
 test_that("original SCR port runs, predicts and reports its BIC", {

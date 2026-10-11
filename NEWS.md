@@ -2,6 +2,10 @@
 
 Dynamic spatially clustered multinomial regression (DSCMR-EN).
 
+- `fit_gw_multinom_en(lambda_grid = )` chooses bandwidth and penalty jointly
+  by held-out log-loss (tuning on at most `tune_anchors` anchors).
+- `scmr_impute_waves()` is robust to observations that are impossible under a
+  regime (no 0/0 in the backward pass).
 - Block-level labels: `scmr_filter_predict()` and `scmr_impute_waves()` take
   `cluster_id`, the spatial unit that carries the cluster label (for example a
   survey segment), while `unit_id` remains the unit whose class sequence is
