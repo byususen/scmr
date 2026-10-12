@@ -1,0 +1,1 @@
+exp=S5 spec=static pattern=irregular n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=FALSE reps=15 rep_start=16
