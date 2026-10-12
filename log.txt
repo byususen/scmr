@@ -1,0 +1,66 @@
+Options:
+List of 24
+ $ exp        : chr "S5"
+ $ spec       : chr "static"
+ $ pattern    : chr "grid"
+ $ reps       : int 15
+ $ rep_start  : int 16
+ $ cores      : int 4
+ $ out        : chr "/home/runner/work/_temp/sim_out"
+ $ n_units    : int 300
+ $ n_time     : int 12
+ $ block_size : int 1
+ $ G          : int 3
+ $ delta      : num 1
+ $ G_grid     : chr "1,2,3,4,5,6,7,8,10,12,15"
+ $ p_active   : int 5
+ $ p_inactive : int 10
+ $ coef_k     : int 10
+ $ n_starts   : int 6
+ $ k_neighbors: int 8
+ $ new_share  : num 0.2
+ $ scr        : logi FALSE
+ $ gw         : logi FALSE
+ $ unit_labels: logi FALSE
+ $ all_G      : logi TRUE
+ $ multipliers: chr "0.0625,0.25,1,4"
+
+== Mean over replications (new locations) ==
+              Model Kappa LogLoss UnitARI BetaMSE   Phi  G Seconds
+1         Global-EN 0.266   1.462      NA   0.762    NA  1   2.933
+2           SCMR-EN 0.510   1.025   0.995   0.158 0.893  6   9.562
+3      SCMR-EN-phi1 0.510   1.026   0.989   0.161 1.000  6   7.656
+4       SCMR-EN@G02 0.353   1.325   0.294   0.624 1.703  2   4.879
+5       SCMR-EN@G03 0.409   1.220   0.514   0.476 0.799  3   6.231
+6       SCMR-EN@G04 0.443   1.149   0.686   0.350 0.836  4   7.233
+7       SCMR-EN@G05 0.481   1.085   0.855   0.243 0.872  5   8.666
+8       SCMR-EN@G06 0.510   1.025   0.995   0.158 0.893  6   9.562
+9       SCMR-EN@G07 0.507   1.035   0.945   0.158 0.929  7  10.628
+10      SCMR-EN@G08 0.504   1.039   0.884   0.162 0.993  8  12.380
+11      SCMR-EN@G10 0.489   1.068   0.768   0.179 1.025 10  14.812
+12      SCMR-EN@G12 0.479   1.094   0.665   0.198 1.099 12  16.415
+13      SCMR-EN@G15 0.469   1.138   0.559   0.233 1.166 15  17.974
+14    SCMR-EN@trueG 0.510   1.025   0.995   0.158 0.893  6   9.562
+15 TCMR-EN (oracle) 0.539   0.975      NA   0.156 1.000  6   0.633
+16      TwoStage-EN 0.407   1.221   0.592   0.425 1.000  6   0.764
+
+Monotone objective in every SCMR fit: TRUE 
+
+== Selected G (true G = 6 ) ==
+  PLIC_AIC     
+ 1  2  3  4  5  6  7  8 10 12 15 
+ 0  0  0  0  0 15  0  0  0  0  0 
+  PLIC_BIC     
+ 1  2  3  4  5  6  7  8 10 12 15 
+ 0  0  0  5  4  6  0  0  0  0  0 
+  SCR_AIC_eff  
+ 1  2  3  4  5  6  7  8 10 12 15 
+ 0  0  0  0  0 15  0  0  0  0  0 
+  SCR_BIC_eff  
+ 1  2  3  4  5  6  7  8 10 12 15 
+ 0  0  0  4  5  6  0  0  0  0  0 
+  CB_BIC       
+ 1  2  3  4  5  6  7  8 10 12 15 
+ 0  0  0  0  1 11  3  0  0  0  0 
+
+Elapsed: 8.408608 mins 
