@@ -22,5 +22,7 @@ simulation_defaults <- function() {
       R22 = 0.0555555555555556, R23 = 0.0555555555555556), smooth_psi_intercept = c(0.7,
       0.9), smooth_psi_active_min = 0.5, smooth_psi_active_max = 1.3,
       smooth_beta_tau2_intercept = 0.8, smooth_beta_tau2_active = 0.8,
-      smooth_center_gp = TRUE)
+      smooth_center_gp = TRUE,
+      irregular_tiles = c(3, 3),
+      irregular_regime_q = c(-1.25, -0.75, -7/12, -17/12, 13/12, -13/12))
 }

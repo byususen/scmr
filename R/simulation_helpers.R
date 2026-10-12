@@ -312,7 +312,7 @@ make_simulation_dataset <- function(n_obs, n_new, p, active, eta, scenario, clas
     smooth_setup = NULL, predictor_eta_scale = 0.3, predictor_kernel_power = 2, predictor_rho_active = 0.5,
     predictor_rho_inactive = 0.1, cluster_member_probs = NULL, heterogeneity_strength = 1, control) {
     set.seed(seed)
-    if (!scenario %in% c("global", "clustered_balanced", "clustered_imbalanced", "smooth")) {
+    if (!scenario %in% c("global", "clustered_balanced", "clustered_imbalanced", "smooth", "clustered_irregular")) {
         stop("Unknown scenario: ", scenario)
     }
     if (!is.finite(heterogeneity_strength) || heterogeneity_strength < 0) {
@@ -347,7 +347,8 @@ make_simulation_dataset <- function(n_obs, n_new, p, active, eta, scenario, clas
         target_probs <- target_probs/sum(target_probs)
     }
     true_cluster_all <- switch(scenario, global = rep("T1", n_obs + n_new), clustered_balanced = as.character(region_all),
-        clustered_imbalanced = as.character(region_all), smooth = rep(NA_character_, n_obs + n_new))
+        clustered_imbalanced = as.character(region_all), smooth = rep(NA_character_, n_obs + n_new),
+        clustered_irregular = paste0("Q", irregular_regime_index(coords_all, control) + 1L))
     X_all <- simulate_predictors(coords = coords_all, p = p, active = active, rho_active = predictor_rho_active,
         rho_inactive = predictor_rho_inactive, eta = eta, predictor_eta_scale = predictor_eta_scale,
         kernel_power = predictor_kernel_power, seed = seed + 2, control = control)
@@ -377,6 +378,12 @@ make_simulation_dataset <- function(n_obs, n_new, p, active, eta, scenario, clas
         beta_cluster_raw <- simulate_beta_clustered(coords = coords_all, p = p, active = active, class_levels = class_levels,
             control = control)
         beta_global_ref + heterogeneity_strength * (beta_cluster_raw - beta_global_ref)
+    }, clustered_irregular = {
+        beta_global_ref <- simulate_beta_global(coords = coords_all, p = p, active = active, class_levels = class_levels,
+            control = control)
+        beta_regime_raw <- simulate_beta_irregular(coords = coords_all, p = p, active = active, class_levels = class_levels,
+            control = control)
+        beta_global_ref + heterogeneity_strength * (beta_regime_raw - beta_global_ref)
     }, smooth = do.call(simulate_beta_smooth, c(list(coords = coords_all, p = p, active = active, seed = seed +
         3, class_levels = class_levels), smooth_setup_use)))
     class_shift <- get_class_balance_shift(class_balance = class_balance, K = length(class_levels), control = control)
@@ -395,4 +402,39 @@ make_simulation_dataset <- function(n_obs, n_new, p, active, eta, scenario, clas
         target_region_probs = target_probs, observed_region_counts = observed_region_counts, new_region_counts = new_region_counts,
         heterogeneity_strength = heterogeneity_strength, n_active = length(active), n_inactive = p -
             length(active))
+}
+
+# Latin-square regimes on a grid of tiles: regime = (row + column) mod 3.
+irregular_regime_index <- function(coords, control) {
+    nt <- control$irregular_tiles
+    col <- floor((coords[, 1] - control$domain_s1_range[1]) / diff(control$domain_s1_range) * nt[1])
+    row <- floor((coords[, 2] - control$domain_s2_range[1]) / diff(control$domain_s2_range) * nt[2])
+    col <- pmin(pmax(col, 0), nt[1] - 1)
+    row <- pmin(pmax(row, 0), nt[2] - 1)
+    as.integer((row + col) %% 3)
+}
+
+simulate_beta_irregular <- function(coords, p = 20, active = 1:5, class_levels, control) {
+    n <- nrow(coords)
+    C <- length(class_levels)
+    beta <- array(0, dim = c(n, C, p + 1), dimnames = list(NULL, class_levels, c("(Intercept)", paste0("x",
+        seq_len(p)))))
+    regime <- irregular_regime_index(coords, control)
+    q <- matrix(control$irregular_regime_q, ncol = 2, byrow = TRUE)
+    a_base <- resize_active_pattern(control$beta_cluster_class1_base, length(active), control = control)
+    b_base <- resize_active_pattern(control$beta_cluster_class2_base, length(active), control = control)
+    for (i in seq_len(n)) {
+        q1 <- q[regime[i] + 1L, 1]
+        q2 <- q[regime[i] + 1L, 2]
+        beta[i, 1, 1] <- control$beta_cluster_intercept_scale_class1 * q1
+        beta[i, 2, 1] <- control$beta_cluster_intercept_scale_class2 * q2
+        beta[i, 3, 1] <- -(beta[i, 1, 1] + beta[i, 2, 1])
+        for (jj in seq_along(active)) {
+            m <- active[jj]
+            beta[i, 1, m + 1] <- a_base[jj] * q1
+            beta[i, 2, m + 1] <- b_base[jj] * q2
+            beta[i, 3, m + 1] <- -(beta[i, 1, m + 1] + beta[i, 2, m + 1])
+        }
+    }
+    beta
 }

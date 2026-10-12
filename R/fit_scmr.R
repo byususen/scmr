@@ -18,6 +18,9 @@
 #' @param lambda_rule Global CV rule: "lambda.1se" or "lambda.min".
 #' @param seed Root random seed, or NULL to use the current RNG state.
 #' @param cluster Fixed cluster label for each training row.
+#' @param init_features Optional matrix of local coefficient features (one row
+#'   per sorted unique unit, e.g. from [scmr_local_coefficients()]) used by
+#'   coefficient-space initialization; computed internally when needed.
 #' @param ... Reserved for extensions.
 #' @return A scmr_fit object with local fits, training probabilities, memberships,
 #'   criteria, cluster components, and diagnostic tables. No files are written.
@@ -31,7 +34,7 @@ fit_scmr <- function(x, y, model = c("scmr", "global", "fixed_clusters"),
                      alpha_grid = NULL, lambda = NULL, control = scmr_control(),
                      initial_cluster = NULL, nfolds = 5,
                      lambda_rule = c("lambda.1se", "lambda.min"), seed = 123,
-                     cluster = NULL, ...) {
+                     cluster = NULL, init_features = NULL, ...) {
   call <- match.call()
   model <- match.arg(model)
   penalty <- match.arg(penalty)
@@ -94,7 +97,7 @@ fit_scmr <- function(x, y, model = c("scmr", "global", "fixed_clusters"),
       ans
     } else {
       fit_partition_core(data, model, penalty, G, groups, fixed_levels, alpha_info,
-                         !is.null(alpha), lambda, control, initial_cluster, seed)
+                         !is.null(alpha), lambda, control, initial_cluster, seed, init_features)
     }
   })
   out$call <- call

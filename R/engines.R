@@ -49,10 +49,28 @@ engine_from_glmnet <- function(fit, x, classes, alpha, lambda, control, warnings
        alpha = alpha, lambda = lambda, standardize = control$standardize,
        type_multinomial = control$type_multinomial,
        converged = is.null(raw$jerr) || identical(as.integer(raw$jerr), 0L),
-       warnings = warnings)
+       warnings = warnings,
+       x_sd = if (isTRUE(control$standardize)) make_pre_transform(x)$scale else NULL)
 }
 
-fit_local_engine <- function(x, y, penalty, alpha, lambda, control) {
+# Global (partition-independent) standardization. With pre-standardized
+# predictors the penalty does not depend on cluster membership, which is
+# required for the monotone alternating algorithm (lambda_scale = "sum").
+make_pre_transform <- function(x) {
+  center <- colMeans(x)
+  scale <- sqrt(colMeans(sweep(x, 2, center, "-")^2))
+  scale[!is.finite(scale) | scale <= 1e-12] <- 1
+  list(center = center, scale = scale)
+}
+
+apply_pre_transform <- function(x, pre) {
+  if (is.null(pre)) return(x)
+  z <- sweep(sweep(x, 2, pre$center, "-"), 2, pre$scale, "/")
+  colnames(z) <- colnames(x)
+  z
+}
+
+fit_local_engine <- function(x, y, penalty, alpha, lambda, control, pre = NULL) {
   classes <- levels(y)
   if (any(table(factor(y, levels = classes)) == 0L)) {
     stop("Every fitted cluster must contain every response class.", call. = FALSE)
@@ -63,11 +81,17 @@ fit_local_engine <- function(x, y, penalty, alpha, lambda, control) {
     invokeRestart("muffleWarning")
   }
   if (penalty != "none") {
+    z <- apply_pre_transform(x, pre)
+    standardize <- if (is.null(pre)) control$standardize else FALSE
     raw <- withCallingHandlers(
-      fit_fixed_lambda_glmnet(x, y, alpha, lambda, classes,
-                             control$standardize, control$type_multinomial,
+      fit_fixed_lambda_glmnet(z, y, alpha, lambda, classes,
+                             standardize, control$type_multinomial,
                              maxit = control$glmnet_maxit), warning = capture_warning)
-    return(engine_from_glmnet(raw, x, classes, alpha, lambda, control, warnings))
+    engine <- engine_from_glmnet(raw, x, classes, alpha, raw$fixed_lambda %||% lambda, control, warnings)
+    engine$standardize <- standardize
+    engine$pre <- pre
+    if (standardize) engine$x_sd <- make_pre_transform(z)$scale
+    return(engine)
   }
   center <- if (control$standardize) colMeans(x) else rep(0, ncol(x))
   scale <- if (control$standardize) apply(x, 2, stats::sd) else rep(1, ncol(x))
@@ -90,7 +114,7 @@ engine_predict <- function(engine, newx) {
   if (!nrow(newx)) return(matrix(numeric(), 0L, length(engine$classes),
                                 dimnames = list(NULL, engine$classes)))
   if (engine$kind == "glmnet") {
-    p <- predict_multinom_prob(engine$fit, newx, engine$lambda)
+    p <- predict_multinom_prob(engine$fit, apply_pre_transform(newx, engine$pre), engine$lambda)
   } else {
     z <- sweep(sweep(newx, 2, engine$center, "-"), 2, engine$scale, "/")
     colnames(z) <- paste0("V", seq_len(ncol(newx)))
@@ -112,6 +136,12 @@ engine_coef <- function(engine, parameterization = c("native", "sum_to_zero")) {
   if (engine$kind == "glmnet") {
     cf <- stats::coef(engine$fit, s = engine$lambda)
     for (cl in engine$classes) out[cl, ] <- as.numeric(cf[[cl]][colnames(out), 1])
+    if (!is.null(engine$pre)) {
+      # Back-transform from the globally standardized fitting scale.
+      slopes <- out[, -1, drop = FALSE]
+      out[, 1] <- out[, 1] - as.numeric(slopes %*% (engine$pre$center / engine$pre$scale))
+      out[, -1] <- sweep(slopes, 2, engine$pre$scale, "/")
+    }
   } else {
     cf <- stats::coef(engine$fit)
     if (is.null(dim(cf))) cf <- matrix(cf, nrow = 1L,
@@ -123,6 +153,27 @@ engine_coef <- function(engine, parameterization = c("native", "sum_to_zero")) {
   }
   if (parameterization == "sum_to_zero") out <- sweep(out, 2, colMeans(out), "-")
   out
+}
+
+# Elastic-net penalty P_alpha(B_g) on the solver's fitting scale (unscaled by lambda).
+# Ungrouped: alpha * sum|b| + (1 - alpha) / 2 * sum b^2; grouped replaces the L1 part
+# by the sum of per-predictor Euclidean norms across classes (glmnet convention).
+engine_penalty <- function(engine) {
+  if (engine$kind != "glmnet") return(0)
+  cf <- stats::coef(engine$fit, s = engine$lambda)
+  b <- do.call(rbind, lapply(engine$classes, function(cl) {
+    v <- as.numeric(cf[[cl]][-1, 1])
+    v[seq_along(engine$features)]
+  }))
+  if (!engine$standardize) {
+    scale <- rep(1, ncol(b))
+  } else {
+    # glmnet penalizes coefficients of internally standardized predictors.
+    scale <- engine$x_sd %||% rep(1, ncol(b))
+  }
+  b <- sweep(b, 2, scale, "*")
+  l1 <- if (identical(engine$type_multinomial, "grouped")) sum(sqrt(colSums(b^2))) else sum(abs(b))
+  engine$alpha * l1 + (1 - engine$alpha) / 2 * sum(b^2)
 }
 
 with_scmr_seed <- function(seed, expr) {
