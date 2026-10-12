@@ -14,6 +14,7 @@
 #           patterns global, grid (2 x 3), irregular (disconnected), smooth GP
 #   exp=S4  blocks of 3 x 3 units sharing the regime (like KSA segments):
 #           labels per block (proposed) versus labels per unit
+#   exp=S5  extended G grid (up to 15) with every G evaluated (all_G=TRUE)
 #   exp=S3  oracle check of the recovery theorem: misassignment versus the
 #           evidence per label (T x block size) and phi; phi-hat on unit and
 #           block graphs (degeneracy lemma)
@@ -25,7 +26,7 @@ suppressPackageStartupMessages(library(scmr))
 opt <- list(exp = "S1", spec = "static", pattern = "grid", reps = 2L, rep_start = 1L, cores = 1L,
             out = "sim_out", n_units = 150L, n_time = 12L, block_size = 1L, G = 3L, delta = 1,
             G_grid = "1,2,3,4,5,6,7,8", p_active = 5L, p_inactive = 10L, coef_k = 10L, n_starts = 6L,
-            k_neighbors = 8L, new_share = 0.2, scr = TRUE, gw = TRUE, unit_labels = FALSE,
+            k_neighbors = 8L, new_share = 0.2, scr = TRUE, gw = TRUE, unit_labels = FALSE, all_G = FALSE,
             multipliers = "0.0625,0.25,1,4")
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -159,6 +160,10 @@ run_dataset <- function(rep) {
   G_star <- if (is.na(Gt)) G_sel else Gt
   models <- list(`Global-EN` = glob)
   models$`SCMR-EN` <- if (!is.na(G_sel)) grid_fits[[match(G_sel, G_grid)]] else simpleError("no G selected")
+  # Optional: evaluate SCMR-EN at every G of the grid (prediction curve over G).
+  if (isTRUE(opt$all_G)) for (j in seq_along(G_grid)) {
+    if (G_grid[j] > 1L && !inherits(grid_fits[[j]], "error")) models[[sprintf("SCMR-EN@G%02d", G_grid[j])]] <- grid_fits[[j]]
+  }
   if (!is.na(Gt) && Gt > 1L) {
     models$`SCMR-EN@trueG` <- if (Gt %in% G_grid) grid_fits[[match(Gt, G_grid)]] else fitG(Gt, phi_update = "pl")
   }
