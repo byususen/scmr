@@ -494,6 +494,9 @@ run_split <- function(design, fold, train, test, spec, mode, G_grid, y_obs = NUL
 # =============================================================================
 # 4. DESIGNS
 # =============================================================================
+# SCMR_DESIGNS="none" loads data and helpers only (used by the interpretation
+# script SCMR_EN_interpret_v4.R).
+if (!identical(designs_to_run, "none")) {
 if ("E2_mapping" %in% designs_to_run) {
   folds <- scmr_block_folds(dat$id_segmen, dat$regency, nfolds = n_folds, seed = outer_seed)
   for (f in prof$folds) run_split("E2_mapping", f, which(folds != f), which(folds == f), "S", "direct", prof$G_grid)
@@ -608,3 +611,4 @@ if (nrow(results)) {
 }
 banner("DONE")
 cat("Outputs in:", output_dir, "| failed runs:", length(list.files(file.path(output_dir, "errors"))), "\n")
+}
