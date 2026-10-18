@@ -5,3 +5,6 @@
 ^\.gitignore$
 ^renv$
 ^renv\.lock$
+^roxygen\.log$
+^scmr\.Rproj$
+^\.Rproj\.user$

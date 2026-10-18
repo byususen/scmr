@@ -1,0 +1,7 @@
+# S5: extended G grid up to 15 (300 units, T = 12, static), SCMR-EN evaluated at every G.
+S5-grid-a exp=S5 spec=static pattern=grid n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=FALSE reps=15 rep_start=1
+S5-grid-b exp=S5 spec=static pattern=grid n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=FALSE reps=15 rep_start=16
+S5-irregular-a exp=S5 spec=static pattern=irregular n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=FALSE reps=15 rep_start=1
+S5-irregular-b exp=S5 spec=static pattern=irregular n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=FALSE reps=15 rep_start=16
+S5-smooth-a exp=S5 spec=static pattern=smooth n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=TRUE reps=15 rep_start=1
+S5-smooth-b exp=S5 spec=static pattern=smooth n_units=300 G_grid=1,2,3,4,5,6,7,8,10,12,15 all_G=TRUE scr=FALSE gw=TRUE reps=15 rep_start=16

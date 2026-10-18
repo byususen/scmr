@@ -21,6 +21,7 @@ fit_scmr(
   lambda_rule = c("lambda.1se", "lambda.min"),
   seed = 123,
   cluster = NULL,
+  init_features = NULL,
   ...
 )
 }
@@ -56,6 +57,10 @@ fit_scmr(
 \item{seed}{Root random seed, or NULL to use the current RNG state.}
 
 \item{cluster}{Fixed cluster label for each training row.}
+
+\item{init_features}{Optional matrix of local coefficient features (one row
+per sorted unique unit, e.g. from \code{\link[=scmr_local_coefficients]{scmr_local_coefficients()}}) used by
+coefficient-space initialization; computed internally when needed.}
 
 \item{...}{Reserved for extensions.}
 }

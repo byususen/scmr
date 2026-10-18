@@ -10,7 +10,8 @@ simulate_scmr_data(
   p = 25,
   active = 1:5,
   eta = 0.2,
-  scenario = c("global", "clustered_balanced", "clustered_imbalanced", "smooth"),
+  scenario = c("global", "clustered_balanced", "clustered_imbalanced", "smooth",
+    "clustered_irregular"),
   class_levels = c("C1", "C2", "C3"),
   seed = 1000,
   class_balance = c("balanced", "imbalanced"),
@@ -29,7 +30,10 @@ simulate_scmr_data(
 
 \item{eta}{Spatial range scale for predictors.}
 
-\item{scenario}{Global, balanced or imbalanced six-region, or smooth coefficients.}
+\item{scenario}{Global, balanced or imbalanced six-region, smooth coefficients,
+or \code{"clustered_irregular"}: three coefficient regimes laid out as a Latin
+square on a grid of tiles, so every regime is spatially disconnected and
+cannot be recovered by clustering coordinates.}
 
 \item{class_levels}{Three distinct response labels. Model fitting itself allows
 any number of classes greater than one.}

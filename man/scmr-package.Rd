@@ -23,6 +23,11 @@ Useful links:
 \author{
 \strong{Maintainer}: Bayu Suseno \email{byususen@users.noreply.github.com}
 
+Authors:
+\itemize{
+  \item Bayu Suseno \email{byususen@users.noreply.github.com}
+}
+
 Other contributors:
 \itemize{
   \item SCMR study contributors [contributor]

@@ -11,7 +11,7 @@ scmr_control(
   weight_bandwidth = NULL,
   row_standardize_weights = FALSE,
   max_iter = 10,
-  init_method = c("kmeans", "random"),
+  init_method = c("kmeans", "random", "coefficient"),
   init_tries = 200,
   update_order = c("random", "fixed"),
   alpha_grid = c(0.6, 0.7, 0.8),
@@ -37,6 +37,17 @@ scmr_control(
   multinom_maxit = 1000,
   multinom_maxnwts = 2e+05,
   selection_tol = 1e-08,
+  lambda_scale = c("mean", "sum"),
+  update_memberships = TRUE,
+  n_starts = 1L,
+  start_methods = NULL,
+  coef_init_k = 50L,
+  coef_init_alpha = 0.2,
+  coef_init_lambda = 0.05,
+  coef_init_anchors = 300L,
+  phi_update = c("fixed", "pl"),
+  phi_max = 20,
+  penalty_size = c("common", "adaptive"),
   verbose = FALSE
 )
 }
@@ -53,7 +64,9 @@ scmr_control(
 
 \item{max_iter}{Maximum number of SCMR membership-update iterations.}
 
-\item{init_method}{Initial spatial partition method, either \code{"kmeans"} or \code{"random"}.}
+\item{init_method}{Initial spatial partition method: \code{"kmeans"} (coordinates),
+\code{"random"}, or \code{"coefficient"} (k-means on local coefficient vectors; see
+\code{\link[=scmr_local_coefficients]{scmr_local_coefficients()}}).}
 
 \item{init_tries}{Number of random/k-means initialization attempts for feasible clusters.}
 
@@ -104,6 +117,45 @@ scmr_control(
 \item{multinom_maxnwts}{Maximum weights for the unpenalized multinomial engine.}
 
 \item{selection_tol}{Absolute native-coefficient support threshold.}
+
+\item{lambda_scale}{\code{"mean"} (glmnet scale, tuned during iterations; legacy)
+or \code{"sum"}. With \code{"sum"}, one sum-scale penalty strength
+kappa = mean(lambda) * n / G, tuned on the first initial partition, is used
+for every cluster and start; predictors are standardized once globally and
+no tuning happens inside the alternation, so the penalized Potts objective
+is non-decreasing (monotone algorithm) and comparable across starts.}
+
+\item{update_memberships}{If \code{FALSE}, keep the initial partition (two-stage
+benchmark: spatial clustering followed by local elastic-net fits).}
+
+\item{n_starts}{Number of initial partitions; the fit with the largest
+penalized objective is returned.}
+
+\item{start_methods}{Optional character vector of initialization methods for
+the starts, recycled to \code{n_starts}; defaults to \code{init_method} then
+alternating \code{"coefficient"} and \code{"kmeans"}.}
+
+\item{coef_init_k}{Number of nearest spatial units in each local fit used by
+coefficient-space initialization.}
+
+\item{coef_init_alpha, coef_init_lambda}{Elastic-net settings of the local fits.}
+
+\item{coef_init_anchors}{Maximum number of anchor units at which local fits
+are computed; other units take the features of their nearest anchor.}
+
+\item{phi_update}{\code{"fixed"} keeps \code{phi} and uses the SCR label term
+phi * (sum of agreeing edge weights); \code{"pl"} replaces it by the Besag
+pseudo-log-likelihood of the Potts model and estimates phi by maximum
+pseudo-likelihood after every membership sweep (see \code{\link[=scmr_potts_phi]{scmr_potts_phi()}});
+\code{phi} is then the starting value.}
+
+\item{phi_max}{Upper bound for the estimated phi.}
+
+\item{penalty_size}{Sum-scale penalty strength per cluster: \code{"common"}
+(kappa for every cluster) or \code{"adaptive"} (kappa * sqrt(n_g / n_bar), less
+shrinkage per observation for small clusters). The change of the penalty
+multiplier is part of the exact membership gain, so the algorithm stays
+monotone.}
 
 \item{verbose}{Print iteration progress when true.}
 }

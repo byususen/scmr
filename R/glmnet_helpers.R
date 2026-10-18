@@ -42,14 +42,17 @@ predict_multinom_prob <- function(fit, newx, s = NULL) {
   } else {
     get_s_value(fit, s)
   }
-  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "response")
+  # Linear predictors and a max-shifted softmax: glmnet's "response" can
+  # overflow to NaN for large linear predictors (extrapolated local fits).
+  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link")
   if (length(dim(arr)) == 3) {
-    prob <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
+    link <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
                    ncol = dim(arr)[2], dimnames = dimnames(arr)[1:2])
   } else {
-    prob <- arr
+    link <- as.matrix(arr)
   }
-  prob <- as.matrix(prob)
+  prob <- softmax_rows(link)
+  dimnames(prob) <- dimnames(link)
   if (is.null(colnames(prob))) {
     cls <- NULL
     if (!is.null(fit$classnames)) cls <- fit$classnames
@@ -82,21 +85,46 @@ glmnet_design <- function(x) {
 
 fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
                                     standardize = TRUE,
-                                    type_multinomial = "grouped", maxit = 100000) {
+                                    type_multinomial = "grouped", maxit = 100000,
+                                    weights = NULL) {
   y <- factor(y, levels = class_levels)
   lambda <- as.numeric(lambda)[1]
   if (!is.finite(lambda) || lambda <= 0) stop("lambda must be positive.", call. = FALSE)
-  lambda_path <- sort(unique(as.numeric(c(lambda * 100, lambda * 10, lambda, lambda / 10))), decreasing = TRUE)
-  lambda_path <- lambda_path[is.finite(lambda_path) & lambda_path > 0]
-  fit <- glmnet::glmnet(
-    x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = lambda_path,
-    standardize = standardize, type.multinomial = type_multinomial, maxit = maxit
-  )
-  if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
-    stop("The glmnet path did not reach the requested lambda; inspect solver limits.", call. = FALSE)
+  # A decreasing warm-start path that ends exactly at the requested lambda.
+  # Nearly separable local data (strong lag-state predictors, tiny lambda) can
+  # stop glmnet before the end of a short path, or make it fail while naming a
+  # truncated path; a longer path with more warm starts is tried next.
+  attempt <- function(n_steps, top) {
+    path <- sort(unique(c(exp(seq(log(lambda * top), log(lambda), length.out = n_steps)), lambda)),
+                 decreasing = TRUE)
+    fit <- tryCatch(glmnet::glmnet(
+      x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = path,
+      standardize = standardize, type.multinomial = type_multinomial, maxit = maxit,
+      weights = weights %||% rep(1, nrow(x))), error = function(e) e)
+    if (inherits(fit, "error")) return(fit)
+    if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
+      err <- simpleError("The glmnet path did not reach the requested lambda; inspect solver limits.")
+      err$fit <- fit
+      return(err)
+    }
+    fit
   }
-  fit$fixed_lambda <- lambda
-  fit$selected_lambda <- lambda
+  fit <- attempt(4L, 100)
+  if (inherits(fit, "error")) fit <- attempt(25L, 1000)
+  if (inherits(fit, "error")) fit <- attempt(60L, 1e4)
+  used <- lambda
+  if (inherits(fit, "error")) {
+    # Last resort: the smallest lambda glmnet reached (a slightly stronger
+    # penalty), reported through the fit and a warning.
+    if (is.null(fit$fit) || !length(fit$fit$lambda)) stop(conditionMessage(fit), call. = FALSE)
+    partial <- fit$fit
+    used <- min(partial$lambda)
+    warning(sprintf("glmnet stopped before lambda = %.3g; using lambda = %.3g.", lambda, used), call. = FALSE)
+    fit <- partial
+  }
+  fit$fixed_lambda <- used
+  fit$selected_lambda <- used
+  fit$requested_lambda <- lambda
   fit
 }
 
