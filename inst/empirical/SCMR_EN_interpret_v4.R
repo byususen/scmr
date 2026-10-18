@@ -85,8 +85,8 @@ if (interp_stage %in% c("all", "fit")) {
         TRUE
       }, v4_script)
       paths <- stats::setNames(vapply(todo, fit_file, ""), todo)
-      parallel::clusterApplyLB(cl, todo, function(G, f, paths, ...) f(G, ..., path = paths[[as.character(G)]]),
-                               f = fit_one, paths = paths, x_cols = x_cols, alpha_full = alpha_full, lam = lam,
+      parallel::clusterApplyLB(cl, todo, fun = function(G, one, paths, ...) one(G, ..., path = paths[[as.character(G)]]),
+                               one = fit_one, paths = paths, x_cols = x_cols, alpha_full = alpha_full, lam = lam,
                                features = features, seed_full = seed_full)
     }, finally = parallel::stopCluster(cl))
   } else msgs <- NULL
