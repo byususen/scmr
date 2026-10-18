@@ -44,6 +44,7 @@ predict_multinom_prob <- function(fit, newx, s = NULL) {
   }
   # Linear predictors and a max-shifted softmax: glmnet's "response" can
   # overflow to NaN for large linear predictors (extrapolated local fits).
+  loadNamespace("glmnet")                # predict methods for fits restored from disk
   arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link")
   if (length(dim(arr)) == 3) {
     link <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],

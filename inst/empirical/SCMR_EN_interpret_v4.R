@@ -99,6 +99,7 @@ if (interp_stage %in% c("all", "fit")) {
 # -----------------------------------------------------------------------------
 if (interp_stage %in% c("all", "report")) {
   banner("REGIME OUTPUTS")
+  loadNamespace("glmnet")                # coef() methods for the saved fits (report-only runs fit nothing)
   fits <- list()
   for (G in interp_G) if (file.exists(fit_file(G))) fits[[as.character(G)]] <- readRDS(fit_file(G))
   if (length(fits)) {

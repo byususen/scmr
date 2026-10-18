@@ -134,6 +134,7 @@ engine_coef <- function(engine, parameterization = c("native", "sum_to_zero")) {
   out <- matrix(0, length(engine$classes), length(engine$features) + 1L,
                 dimnames = list(engine$classes, c("(Intercept)", engine$features)))
   if (engine$kind == "glmnet") {
+    loadNamespace("glmnet")              # registers coef.multnet when a saved fit is used in a fresh session
     cf <- stats::coef(engine$fit, s = engine$lambda)
     for (cl in engine$classes) out[cl, ] <- as.numeric(cf[[cl]][colnames(out), 1])
     if (!is.null(engine$pre)) {
