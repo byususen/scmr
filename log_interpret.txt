@@ -1,0 +1,98 @@
+scmr 0.5.0 | profile ci | designs none | LightGBM TRUE 
+
+==== LOAD DATA ====
+Rows: 7670 | units: 324 | segments: 36 | satellite predictors: 8 | rows with previous phase: 7254 
+     Regency
+Phase 3205 3212 6171
+    1  474  398  588
+    2  329  563  436
+    3  351  535  445
+    4  328  420  292
+    5  333  339  418
+    6  743  298  380
+
+==== FINAL FITS ON ALL SEGMENTS ====
+  [20:30] global cross-validation (spec S)
+  [20:30] inner validation of the local penalty (spec S)
+ Multiplier   Lambda LogLoss   Kappa  Minutes
+          1 0.008953   1.438 0.27206 0.008983
+          4 0.035813   1.501 0.27394 0.007067
+         16 0.143251   1.732 0.10256 0.006650
+         64 0.573005   1.774 0.05474 0.006567
+  [20:30] local coefficient features (spec S)
+  alpha 0.9 | local lambda 0.00895 (x 1 )
+  fitting G = 3, 2, 1 in 2 worker processes (progress in /home/runner/work/_temp/emp_out/interpret/workers_log.txt )
+    G =  3 done in 0.0 min | phi 2.576 | PLIC-AIC 21416 | PLIC-BIC 22295 
+    G =  2 done in 0.0 min | phi 2.453 | PLIC-AIC 23263 | PLIC-BIC 23813 
+    G =  1 done in 0.0 min | phi NA | PLIC-AIC 25255 | PLIC-BIC 25434 
+There were 40 warnings (use warnings() to see them)
+
+==== REGIME OUTPUTS ====
+ G     Phi PLIC_AIC PLIC_BIC df_effective        logPL   Minutes
+ 3 2.57640  21416.4  22295.0     125.5009 -2.42811e-08 0.0263667
+ 2 2.45294  23263.3  23813.3      78.1920 -3.29469e-08 0.0211167
+ 1      NA  25255.2  25434.2      25.7749  0.00000e+00 0.0077000
+            Chosen
+ PLIC-AIC PLIC-BIC
+                  
+                  
+
+== G = 3 | clusters x regency (segments)
+       Regency
+Cluster Garut Indramayu Pontianak
+      1    12         0         0
+      2     0        12         0
+      3     0         0        12
+
+== G = 2 | clusters x regency (segments)
+       Regency
+Cluster Garut Indramayu Pontianak
+      1    12         0         0
+      2     0        12        12
+
+Spatial coherence of the fitted regimes (8 nearest segments):
+ G  Phi MajorityAgree MixedNeighbours PottsWeight_median PottsWeight_below_half
+ 3 2.58             1               0                  1                      0
+ 2 2.45             1               0                  1                      0
+ PosteriorWeight_min
+                   1
+                   1
+
+==== SEGMENT BOOTSTRAP (E2) ====
+Pooled out-of-fold kappa and 95% segment-bootstrap intervals of differences ( 50 resamples ):
+            Reference                Comparator Kappa_reference
+ SCMR-EN-S (PLIC-AIC)      SCMR-EN-S (PLIC-BIC)           0.249
+ SCMR-EN-S (PLIC-AIC) SCR-original-S (BIC asli)           0.249
+ SCMR-EN-S (PLIC-AIC)               Global-EN-S           0.249
+ SCMR-EN-S (PLIC-AIC)              Regency-EN-S           0.249
+ SCMR-EN-S (PLIC-AIC)                   GW-EN-S           0.249
+ SCMR-EN-S (PLIC-AIC)                LightGBM-S           0.249
+ SCMR-EN-S (PLIC-BIC)      SCMR-EN-S (PLIC-AIC)           0.249
+ SCMR-EN-S (PLIC-BIC) SCR-original-S (BIC asli)           0.249
+ SCMR-EN-S (PLIC-BIC)               Global-EN-S           0.249
+ SCMR-EN-S (PLIC-BIC)              Regency-EN-S           0.249
+ SCMR-EN-S (PLIC-BIC)                   GW-EN-S           0.249
+ SCMR-EN-S (PLIC-BIC)                LightGBM-S           0.249
+ Kappa_comparator Difference  CI_low CI_high Share_positive
+            0.249    0.00000  0.0000  0.0000           0.00
+            0.212    0.03662 -0.0408  0.1048           0.80
+            0.164    0.08476  0.0423  0.1199           1.00
+            0.313   -0.06454 -0.1083 -0.0305           0.00
+            0.254   -0.00561 -0.0314  0.0221           0.32
+            0.237    0.01134 -0.0114  0.0363           0.76
+            0.249    0.00000  0.0000  0.0000           0.00
+            0.212    0.03662 -0.0408  0.1048           0.80
+            0.164    0.08476  0.0423  0.1199           1.00
+            0.313   -0.06454 -0.1083 -0.0305           0.00
+            0.254   -0.00561 -0.0314  0.0221           0.32
+            0.237    0.01134 -0.0114  0.0363           0.76
+Warning messages:
+1: In regularize.values(x, y, ties, missing(ties), na.rm = na.rm) :
+  collapsing to unique 'x' values
+2: In regularize.values(x, y, ties, missing(ties), na.rm = na.rm) :
+  collapsing to unique 'x' values
+3: In regularize.values(x, y, ties, missing(ties), na.rm = na.rm) :
+  collapsing to unique 'x' values
+
+==== INTERPRETATION DONE ====
+Outputs in: /home/runner/work/_temp/emp_out/interpret 
