@@ -14,12 +14,16 @@
 #    the pooled out-of-fold predictions of the v4 run.
 #
 # Resume-safe: one RDS per fitted G under <output_dir>/interpret/fits.
-# Environment: SCMR_INTERP_G (default "3,6,8,15"), SCMR_INTERP_STAGE ("all",
-# "fit" or "report"), SCMR_BOOT (default 1000), plus the v4 variables.
+# Environment: SCMR_INTERP_G (default "1,3,6,8,10,12,15"), SCMR_INTERP_STAGE
+# ("all", "fit" or "report"), SCMR_BOOT (default 1000), SCMR_INTERP_WORKERS
+# (default 1; > 1 fits the G values in parallel R worker processes, each
+# loading the data once), plus the v4 variables.
 # =============================================================================
-interp_G <- as.integer(strsplit(Sys.getenv("SCMR_INTERP_G", "3,6,8,15"), ",")[[1]])
+interp_G <- suppressWarnings(as.integer(strsplit(Sys.getenv("SCMR_INTERP_G", "1,3,6,8,10,12,15"), ",")[[1]]))
+interp_G <- sort(unique(interp_G[!is.na(interp_G) & interp_G >= 1]), decreasing = TRUE)
 interp_stage <- Sys.getenv("SCMR_INTERP_STAGE", "all")
 n_boot <- as.integer(Sys.getenv("SCMR_BOOT", "1000"))
+n_workers <- max(1L, as.integer(Sys.getenv("SCMR_INTERP_WORKERS", "1")))
 
 syntax_dir0 <- Sys.getenv("SCMR_SYNTAX_DIR", "C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax")
 v4_script <- Sys.getenv("SCMR_V4_SCRIPT", file.path(syntax_dir0, "SCMR_EN_empirical_article_v4.R"))
@@ -48,20 +52,46 @@ if (interp_stage %in% c("all", "fit")) {
   tuned <- tune_local("FULL", 0L, "S", all_rows, lam_base, global$alpha, seed_full, "direct")
   lam <- lam_base * tuned$multiplier
   features <- local_features("FULL", 0L, "S", all_rows, global, seed_full)
-  Xall <- X_base[, global$x_colnames, drop = FALSE]
-  cat("  alpha", global$alpha, "| local lambda", signif(lam, 3), "(x", tuned$multiplier, ")\n")
-  for (G in interp_G) {
-    if (file.exists(fit_file(G))) { cat("  G =", G, "exists\n"); next }
-    cat(sprintf("  [%s] SCMR-EN-S G = %d on all segments\n", format(Sys.time(), "%H:%M"), G))
-    t0 <- proc.time()[["elapsed"]]
-    fit <- fit_scmr(Xall, dat$phase, model = "scmr", G = G, unit_id = seg_id, coords = seg_xy,
-                    alpha = global$alpha, lambda = lam, control = control_for("SCMR-EN"),
-                    seed = seed_full, init_features = features)
-    fit$fit_minutes <- (proc.time()[["elapsed"]] - t0) / 60
-    saveRDS(fit, fit_file(G))
-    cat(sprintf("    done in %.1f min | phi %.3f | PLIC-AIC %.0f | PLIC-BIC %.0f\n", fit$fit_minutes,
-                fit$phi %||% NA, fit$criteria$CriterionPLIC_AIC, fit$criteria$CriterionPLIC_BIC))
+  x_cols <- global$x_colnames
+  alpha_full <- global$alpha
+  cat("  alpha", alpha_full, "| local lambda", signif(lam, 3), "(x", tuned$multiplier, ")\n")
+  # One fit; uses only objects created by the v4 script plus the arguments, so
+  # it runs unchanged in a worker that has sourced the v4 script.
+  fit_one <- function(G, x_cols, alpha_full, lam, features, seed_full, path) {
+    tryCatch({
+      cat(sprintf("  [%s] SCMR-EN-S G = %d on all segments\n", format(Sys.time(), "%H:%M"), G))
+      t0 <- proc.time()[["elapsed"]]
+      fit <- fit_scmr(X_base[, x_cols, drop = FALSE], dat$phase, model = "scmr", G = G, unit_id = seg_id,
+                      coords = seg_xy, alpha = alpha_full, lambda = lam, control = control_for("SCMR-EN"),
+                      seed = seed_full, init_features = features)
+      fit$fit_minutes <- (proc.time()[["elapsed"]] - t0) / 60
+      saveRDS(fit, path)
+      sprintf("G = %2d done in %.1f min | phi %.3f | PLIC-AIC %.0f | PLIC-BIC %.0f", G, fit$fit_minutes,
+              if (is.null(fit$phi)) NA_real_ else fit$phi, fit$criteria$CriterionPLIC_AIC, fit$criteria$CriterionPLIC_BIC)
+    }, error = function(e) sprintf("G = %2d FAILED: %s", G, conditionMessage(e)))
   }
+  todo <- interp_G[!file.exists(vapply(interp_G, fit_file, ""))]
+  for (G in setdiff(interp_G, todo)) cat("  G =", G, "exists\n")
+  if (length(todo) && n_workers > 1L && length(todo) > 1L) {
+    nw <- min(n_workers, length(todo))
+    cat("  fitting G =", paste(todo, collapse = ", "), "in", nw, "worker processes (progress in",
+        file.path(int_dir, "workers_log.txt"), ")\n")
+    cl <- parallel::makePSOCKcluster(nw, outfile = file.path(int_dir, "workers_log.txt"))
+    msgs <- tryCatch({
+      parallel::clusterCall(cl, function(script) {
+        Sys.setenv(SCMR_DESIGNS = "none")
+        sink(tempfile()); on.exit(sink())   # keep the workers' data-loading output out of the log
+        source(script)
+        TRUE
+      }, v4_script)
+      paths <- stats::setNames(vapply(todo, fit_file, ""), todo)
+      parallel::clusterApplyLB(cl, todo, fun = function(G, one, paths, ...) one(G, ..., path = paths[[as.character(G)]]),
+                               one = fit_one, paths = paths, x_cols = x_cols, alpha_full = alpha_full, lam = lam,
+                               features = features, seed_full = seed_full)
+    }, finally = parallel::stopCluster(cl))
+  } else msgs <- NULL
+  if (length(todo) && is.null(msgs)) msgs <- lapply(todo, function(G) fit_one(G, x_cols, alpha_full, lam, features, seed_full, fit_file(G)))
+  for (m in msgs) cat("   ", m, "\n")
 }
 
 # -----------------------------------------------------------------------------
@@ -85,6 +115,7 @@ if (interp_stage %in% c("all", "report")) {
     x_sd <- apply(X_base, 2, stats::sd)
     for (f in fits) {
       G <- f$G
+      if (G < 2) next                    # G = 1 enters the criterion table only
       tag <- sprintf("G%02d", G)
       # Memberships with soft weights (Potts conditional of the 8 nearest segments).
       pp <- f$PP_unit
