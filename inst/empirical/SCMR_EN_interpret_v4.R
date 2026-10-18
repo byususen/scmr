@@ -76,8 +76,8 @@ if (interp_stage %in% c("all", "report")) {
       PLIC_AIC = f$criteria$CriterionPLIC_AIC, PLIC_BIC = f$criteria$CriterionPLIC_BIC,
       df_effective = f$criteria$df_effective_total, logPL = f$criteria$PottsLogPseudoLik,
       Minutes = f$fit_minutes %||% NA_real_)))
-    crit$Chosen <- ifelse(crit$PLIC_AIC == min(crit$PLIC_AIC), "PLIC-AIC", "")
-    crit$Chosen[crit$PLIC_BIC == min(crit$PLIC_BIC)] <- trimws(paste(crit$Chosen[crit$PLIC_BIC == min(crit$PLIC_BIC)], "PLIC-BIC"))
+    crit$Chosen <- trimws(paste(ifelse(crit$PLIC_AIC == min(crit$PLIC_AIC), "PLIC-AIC", ""),
+                                ifelse(crit$PLIC_BIC == min(crit$PLIC_BIC), "PLIC-BIC", "")))
     utils::write.csv(crit, file.path(int_dir, "full_fit_criteria.csv"), row.names = FALSE)
     print(crit, row.names = FALSE, digits = 6)
 
@@ -119,8 +119,9 @@ if (interp_stage %in% c("all", "report")) {
       utils::write.csv(top, file.path(int_dir, sprintf("top_features_%s.csv", tag)), row.names = FALSE)
       # Maps: one panel per regency (study areas only), colour-blind-safe palette.
       cols <- okabe[seq_len(G)]
-      grDevices::png(file.path(int_dir, sprintf("map_regimes_%s.png", tag)), width = 3300, height = 1300, res = 300)
-      op <- graphics::par(mfrow = c(1, 3), mar = c(4, 4, 3, 1), oma = c(3, 0, 0, 0))
+      grDevices::png(file.path(int_dir, sprintf("map_regimes_%s.png", tag)), width = 3300, height = 1500, res = 300)
+      graphics::layout(matrix(c(1, 2, 3, 4, 4, 4), 2, byrow = TRUE), heights = c(1, 0.22))
+      op <- graphics::par(mar = c(4, 4, 3, 1))
       for (rg in names(regency_names)) {
         z <- mem[mem$Regency == rg, ]
         if (!nrow(z)) { graphics::plot.new(); next }
@@ -128,12 +129,13 @@ if (interp_stage %in% c("all", "report")) {
                        cex = 0.6 + 1.2 * z$MaxWeight, asp = 1, xlab = "Longitude", ylab = "Latitude",
                        main = regency_names[[rg]])
       }
-      graphics::par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
-      graphics::plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
-      graphics::legend("bottom", legend = paste("Rezim", seq_len(G)), pt.bg = cols, pch = 21, horiz = TRUE,
-                       bty = "n", cex = 0.8, xpd = TRUE)
-      graphics::mtext("Map lines delineate study areas and do not necessarily depict accepted national boundaries.",
-                      side = 1, line = -0.5, cex = 0.5)
+      graphics::par(mar = c(0, 0, 0, 0))
+      graphics::plot.new()
+      graphics::legend("top", legend = paste("Rezim", seq_len(G)), pt.bg = cols, pch = 21, horiz = TRUE,
+                       bty = "n", cex = 0.9)
+      graphics::mtext(paste("Ukuran titik = bobot keanggotaan terbesar.",
+                            "Map lines delineate study areas and do not necessarily depict accepted national boundaries."),
+                      side = 1, line = -1, cex = 0.55)
       graphics::par(op)
       grDevices::dev.off()
     }
