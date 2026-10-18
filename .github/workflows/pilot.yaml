@@ -67,7 +67,7 @@ jobs:
           SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
             Rscript inst/empirical/SCMR_EN_empirical_article_v4.R 2>&1 | tee "$out/log.txt"
           SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
-            SCMR_V4_SCRIPT="inst/empirical/SCMR_EN_empirical_article_v4.R" SCMR_INTERP_G="${SCMR_INTERP_G:-2,3}" SCMR_BOOT=50 \
+            SCMR_V4_SCRIPT="inst/empirical/SCMR_EN_empirical_article_v4.R" SCMR_INTERP_G="${SCMR_INTERP_G:-1,2,3}" SCMR_INTERP_WORKERS=2 SCMR_BOOT=50 \
             Rscript inst/empirical/SCMR_EN_interpret_v4.R 2>&1 | tee "$out/log_interpret.txt"
       - name: Publish results to branch ci-logs/empirical-<tag>
         if: always()
