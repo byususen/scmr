@@ -113,6 +113,20 @@ if (interp_stage %in% c("all", "report")) {
 
     seg_tab2 <- unique(data.frame(Segment = seg_id, Regency = dat$regency, Lat = seg_xy[, 1], Lon = seg_xy[, 2]))
     x_sd <- apply(X_base, 2, stats::sd)
+    # Potts conditional weight of each segment's own regime given the regimes of
+    # its k nearest segments (the weight a segment would receive with its own
+    # data removed; the posterior weights are ~1 because every segment carries
+    # many observations).
+    potts_weight <- function(mem, phi, G, k = 8L) {
+      D <- as.matrix(stats::dist(as.matrix(mem[, c("Lat", "Lon")]))); diag(D) <- Inf
+      nb <- t(apply(D, 1, function(d) order(d)[seq_len(k)]))
+      cnt <- t(apply(nb, 1, function(j) tabulate(mem$Cluster[j], G)))
+      w <- exp(phi * cnt); w <- w / rowSums(w)
+      own <- cbind(seq_len(nrow(mem)), mem$Cluster)
+      data.frame(PottsWeight = w[own], NeighbourShare = cnt[own] / k,
+                 MajorityAgree = cnt[own] == apply(cnt, 1, max))
+    }
+    coherence <- list()
     for (f in fits) {
       G <- f$G
       if (G < 2) next                    # G = 1 enters the criterion table only
@@ -120,8 +134,12 @@ if (interp_stage %in% c("all", "report")) {
       # Memberships with soft weights (Potts conditional of the 8 nearest segments).
       pp <- f$PP_unit
       mem <- data.frame(Segment = names(f$group_unit), Cluster = as.integer(f$group_unit),
-                        MaxWeight = apply(pp[names(f$group_unit), , drop = FALSE], 1, max))
+                        PosteriorWeight = apply(pp[names(f$group_unit), , drop = FALSE], 1, max))
       mem <- merge(seg_tab2, mem, by = "Segment")
+      mem <- cbind(mem, potts_weight(mem, f$phi, G))
+      coherence[[tag]] <- data.frame(G = G, Phi = f$phi, MajorityAgree = mean(mem$MajorityAgree),
+        MixedNeighbours = mean(mem$NeighbourShare < 1), PottsWeight_median = stats::median(mem$PottsWeight),
+        PottsWeight_below_half = mean(mem$PottsWeight < 0.5), PosteriorWeight_min = min(mem$PosteriorWeight))
       utils::write.csv(mem, file.path(int_dir, sprintf("memberships_%s.csv", tag)), row.names = FALSE)
       tab <- table(Cluster = mem$Cluster, Regency = regency_names[mem$Regency])
       utils::write.csv(as.data.frame.matrix(tab), file.path(int_dir, sprintf("cluster_by_regency_%s.csv", tag)))
@@ -157,18 +175,23 @@ if (interp_stage %in% c("all", "report")) {
         z <- mem[mem$Regency == rg, ]
         if (!nrow(z)) { graphics::plot.new(); next }
         graphics::plot(z$Lon, z$Lat, pch = 21, bg = cols[z$Cluster], col = "grey20",
-                       cex = 0.6 + 1.2 * z$MaxWeight, asp = 1, xlab = "Longitude", ylab = "Latitude",
+                       cex = 0.5 + 1.5 * z$PottsWeight, asp = 1, xlab = "Longitude", ylab = "Latitude",
                        main = regency_names[[rg]])
       }
       graphics::par(mar = c(0, 0, 0, 0))
       graphics::plot.new()
-      graphics::legend("top", legend = paste("Rezim", seq_len(G)), pt.bg = cols, pch = 21, horiz = TRUE,
+      graphics::legend("top", legend = paste("Regime", seq_len(G)), pt.bg = cols, pch = 21, horiz = TRUE,
                        bty = "n", cex = 0.9)
-      graphics::mtext(paste("Ukuran titik = bobot keanggotaan terbesar.",
+      graphics::mtext(paste("Point size: Potts conditional weight of the segment's own regime given its 8 nearest segments.",
                             "Map lines delineate study areas and do not necessarily depict accepted national boundaries."),
                       side = 1, line = -1, cex = 0.55)
       graphics::par(op)
       grDevices::dev.off()
+    }
+    if (length(coherence)) {
+      coh <- do.call(rbind, coherence); rownames(coh) <- NULL
+      utils::write.csv(coh, file.path(int_dir, "spatial_coherence.csv"), row.names = FALSE)
+      cat("\nSpatial coherence of the fitted regimes (8 nearest segments):\n"); print(coh, row.names = FALSE, digits = 3)
     }
   }
 
