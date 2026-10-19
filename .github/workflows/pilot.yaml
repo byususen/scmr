@@ -65,6 +65,7 @@ jobs:
           if [ -f inst/empirical/ci_env.txt ]; then set -a; . inst/empirical/ci_env.txt; set +a; fi
           Rscript inst/empirical/make_fake_ksa.R "$RUNNER_TEMP/fake.csv"
           SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
+            SCMR_E1_FOLDS="${SCMR_E1_FOLDS:-1,2}" SCMR_E3_FOLDS="${SCMR_E3_FOLDS:-1,2}" \
             Rscript inst/empirical/SCMR_EN_empirical_article_v4.R 2>&1 | tee "$out/log.txt"
           SCMR_DATA_FILE="$RUNNER_TEMP/fake.csv" SCMR_OUTPUT_DIR="$out" SCMR_PROFILE="${SCMR_PROFILE:-ci}" \
             SCMR_V4_SCRIPT="inst/empirical/SCMR_EN_empirical_article_v4.R" SCMR_INTERP_G="${SCMR_INTERP_G:-1,2,3}" SCMR_INTERP_WORKERS=2 SCMR_BOOT=50 \

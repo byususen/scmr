@@ -15,7 +15,7 @@
 #
 # Resume-safe: one RDS per fitted G under <output_dir>/interpret/fits.
 # Environment: SCMR_INTERP_G (default "1,3,6,8,10,12,15"), SCMR_INTERP_STAGE
-# ("all", "fit" or "report"), SCMR_BOOT (default 1000), SCMR_INTERP_WORKERS
+# ("all", "fit", "report" or "boot" = bootstrap only), SCMR_BOOT (default 1000), SCMR_INTERP_WORKERS
 # (default 1; > 1 fits the G values in parallel R worker processes, each
 # loading the data once), plus the v4 variables.
 # =============================================================================
@@ -196,62 +196,98 @@ if (interp_stage %in% c("all", "report")) {
     }
   }
 
-  # ---------------------------------------------------------------------------
-  # 3. Segment bootstrap of paired E2 differences
-  # ---------------------------------------------------------------------------
-  banner("SEGMENT BOOTSTRAP (E2)")
+}
+
+# -----------------------------------------------------------------------------
+# 3. Segment bootstrap of paired differences (E2, E1, E3)
+# -----------------------------------------------------------------------------
+# Pooled held-out predictions of every split of a design are resampled by
+# segment. SCMR-EN enters twice, with G chosen per split by PLIC-AIC and by
+# PLIC-BIC (G = 1 is the global model); SCR-original with its own BIC.
+if (interp_stage %in% c("all", "report", "boot")) {
+  banner("SEGMENT BOOTSTRAP")
   rp_file <- file.path(output_dir, "row_predictions.csv")
   res_file <- file.path(output_dir, "results.csv")
   if (file.exists(rp_file) && file.exists(res_file)) {
     res <- utils::read.csv(res_file, stringsAsFactors = FALSE)
-    rp <- utils::read.csv(rp_file, stringsAsFactors = FALSE, colClasses = c(Segment = "character", Phase = "character"))
-    rp <- rp[rp$Design == "E2_mapping", ]
-    e2 <- res[res$Design == "E2_mapping", ]
-    pick <- function(model, crit) {
-      z <- e2[e2$Model == model & e2$G > 1 & is.finite(e2[[crit]]), ]
-      do.call(rbind, lapply(split(z, z$Fold), function(d) d[which.min(d[[crit]]), c("Fold", "G")]))
-    }
-    sel <- list(`SCMR-EN-S (PLIC-AIC)` = cbind(pick("SCMR-EN-S", "CriterionPLIC_AIC"), Model = "SCMR-EN-S"),
-                `SCMR-EN-S (PLIC-BIC)` = cbind(pick("SCMR-EN-S", "CriterionPLIC_BIC"), Model = "SCMR-EN-S"),
-                `SCR-original-S (BIC asli)` = cbind(pick("SCR-original-S", "CriterionSCR_BIC_original"), Model = "SCR-original-S"))
-    fixed <- c("Global-EN-S" = 1L, "Regency-EN-S" = 3L, "GW-EN-S" = 0L, "LightGBM-S" = 0L)
-    for (m in names(fixed)) sel[[m]] <- data.frame(Fold = sort(unique(rp$Fold)), G = fixed[[m]], Model = m)
-    preds <- lapply(sel, function(s) {
-      z <- merge(rp, s, by = c("Fold", "Model", "G"))
-      z[order(z$Row), c("Row", "Segment", "Phase", "Pred")]
-    })
-    ok <- vapply(preds, nrow, integer(1)) > 0
-    preds <- preds[ok]
-    rows <- Reduce(intersect, lapply(preds, `[[`, "Row"))
-    preds <- lapply(preds, function(z) z[match(rows, z$Row), ])
-    truth <- factor(preds[[1]]$Phase, levels = class_levels)
-    seg <- preds[[1]]$Segment
-    kappa_of <- function(pred, idx) {
-      tb <- table(factor(truth[idx], levels = class_levels), factor(pred[idx], levels = class_levels))
+    rp_all <- utils::read.csv(rp_file, stringsAsFactors = FALSE, check.names = FALSE,
+                              colClasses = c(Segment = "character", Phase = "character", Pred = "character"))
+    kappa_of <- function(truth, pred) {
+      tb <- table(factor(truth, levels = class_levels), factor(pred, levels = class_levels))
       n <- sum(tb); po <- sum(diag(tb)) / n; pe <- sum(rowSums(tb) * colSums(tb)) / n^2
       (po - pe) / (1 - pe)
     }
-    pred_chr <- lapply(preds, function(z) as.character(z$Pred))
-    seg_rows <- split(seq_along(seg), seg)
-    point <- vapply(pred_chr, kappa_of, numeric(1), idx = seq_along(seg))
-    set.seed(outer_seed + 77L)
-    boot <- t(vapply(seq_len(n_boot), function(b) {
-      idx <- unlist(seg_rows[sample.int(length(seg_rows), replace = TRUE)], use.names = FALSE)
-      vapply(pred_chr, kappa_of, numeric(1), idx = idx)
-    }, numeric(length(pred_chr))))
-    out <- list()
-    for (ref in intersect(c("SCMR-EN-S (PLIC-AIC)", "SCMR-EN-S (PLIC-BIC)"), names(pred_chr))) {
-      for (m in setdiff(names(pred_chr), ref)) {
-        d <- boot[, ref] - boot[, m]
-        out[[length(out) + 1L]] <- data.frame(Reference = ref, Comparator = m,
-          Kappa_reference = point[[ref]], Kappa_comparator = point[[m]], Difference = point[[ref]] - point[[m]],
-          CI_low = stats::quantile(d, 0.025), CI_high = stats::quantile(d, 0.975), Share_positive = mean(d > 0))
+    boot_rows <- list()
+    for (design in intersect(c("E2_mapping", "E1_nowcast", "E3_imputation"), unique(res$Design))) {
+      sp <- if (design == "E2_mapping") "S" else "D"
+      d <- res[res$Design == design, ]
+      rp <- rp_all[rp_all$Design == design, ]
+      if (!nrow(rp)) next
+      scmr <- paste0("SCMR-EN-", sp); glob <- paste0("Global-EN-", sp)
+      pick <- function(crit, model = scmr, with_global = TRUE) {
+        z <- d[d$Model == model & d$G > 1 & is.finite(d[[crit]]), c("Fold", "Model", "G", crit)]
+        if (with_global) {
+          g1 <- d[d$Model == glob & is.finite(d[[crit]]), c("Fold", "Model", "G", crit)]
+          z <- rbind(z, g1)
+        }
+        if (!nrow(z)) return(NULL)
+        do.call(rbind, lapply(split(z, z$Fold), function(q) q[which.min(q[[crit]]), c("Fold", "Model", "G")]))
+      }
+      sel <- list(`SCMR-EN (PLIC-AIC)` = pick("CriterionPLIC_AIC"),
+                  `SCMR-EN (PLIC-BIC)` = pick("CriterionPLIC_BIC"),
+                  `SCR-original (BIC)` = pick("CriterionSCR_BIC_original", paste0("SCR-original-", sp), FALSE))
+      for (m in c("Global-EN", "Regency-EN", "GW-EN", "LightGBM")) {
+        mm <- paste0(m, "-", sp)
+        z <- unique(d[d$Model == mm, c("Fold", "Model", "G")])
+        if (nrow(z)) sel[[m]] <- z
+      }
+      sel <- Filter(Negate(is.null), sel)
+      for (nm in names(sel)) cat(sprintf("  %-14s %-20s G per split: %s\n", design, nm, paste(sel[[nm]]$G, collapse = ", ")))
+      preds <- lapply(sel, function(s) {
+        z <- merge(rp, s, by = c("Fold", "Model", "G"))
+        z[order(z$Fold, z$Row), ]
+      })
+      preds <- preds[vapply(preds, nrow, integer(1)) > 0]
+      key <- function(z) paste(z$Fold, z$Row)
+      keys <- Reduce(intersect, lapply(preds, key))
+      preds <- lapply(preds, function(z) z[match(keys, key(z)), ])
+      truth <- preds[[1]]$Phase
+      seg <- preds[[1]]$Segment
+      pred_chr <- lapply(preds, function(z) as.character(z$Pred))
+      # Log-loss from the stored class probabilities (clipped at 1e-15).
+      ll_row <- lapply(preds, function(z) {
+        P <- as.matrix(z[, class_levels]); p <- P[cbind(seq_len(nrow(P)), match(truth, class_levels))]
+        -log(pmax(p, 1e-15))
+      })
+      seg_rows <- split(seq_along(seg), seg)
+      stat <- function(idx) c(vapply(pred_chr, function(p) kappa_of(truth[idx], p[idx]), numeric(1)),
+                              vapply(ll_row, function(l) mean(l[idx]), numeric(1)))
+      k <- length(pred_chr)
+      point <- stat(seq_along(seg))
+      set.seed(outer_seed + 77L + match(design, designs_all))
+      B <- t(vapply(seq_len(n_boot), function(b) stat(unlist(seg_rows[sample.int(length(seg_rows), replace = TRUE)],
+                                                               use.names = FALSE)), numeric(2 * k)))
+      for (ref in intersect(c("SCMR-EN (PLIC-AIC)", "SCMR-EN (PLIC-BIC)"), names(pred_chr))) {
+        r <- match(ref, names(pred_chr))
+        for (m in setdiff(seq_len(k), r)) {
+          dk <- B[, r] - B[, m]; dl <- B[, k + r] - B[, k + m]
+          boot_rows[[length(boot_rows) + 1L]] <- data.frame(Design = design, Splits = length(unique(preds[[1]]$Fold)),
+            Rows = length(seg), Segments = length(seg_rows), Reference = ref, Comparator = names(pred_chr)[m],
+            Kappa_reference = point[r], Kappa_comparator = point[m], Difference = point[r] - point[m],
+            CI_low = stats::quantile(dk, 0.025), CI_high = stats::quantile(dk, 0.975), Share_positive = mean(dk > 0),
+            LogLoss_reference = point[k + r], LogLoss_comparator = point[k + m], LogLoss_difference = point[k + r] - point[k + m],
+            LogLoss_CI_low = stats::quantile(dl, 0.025), LogLoss_CI_high = stats::quantile(dl, 0.975))
+        }
       }
     }
-    bt <- do.call(rbind, out); rownames(bt) <- NULL
-    utils::write.csv(bt, file.path(int_dir, "bootstrap_E2_pooled_kappa.csv"), row.names = FALSE)
-    cat("Pooled out-of-fold kappa and 95% segment-bootstrap intervals of differences (", n_boot, "resamples ):\n")
-    print(bt, row.names = FALSE, digits = 3)
+    bt <- do.call(rbind, boot_rows); rownames(bt) <- NULL
+    utils::write.csv(bt, file.path(int_dir, "bootstrap_pooled_differences.csv"), row.names = FALSE)
+    e2 <- bt[bt$Design == "E2_mapping", c("Reference", "Comparator", "Kappa_reference", "Kappa_comparator", "Difference",
+                                          "CI_low", "CI_high", "Share_positive")]
+    if (nrow(e2)) utils::write.csv(e2, file.path(int_dir, "bootstrap_E2_pooled_kappa.csv"), row.names = FALSE)
+    cat("Pooled held-out kappa and log-loss, 95% segment-bootstrap intervals (", n_boot, "resamples ):\n")
+    print(bt[, c("Design", "Splits", "Reference", "Comparator", "Difference", "CI_low", "CI_high",
+                 "LogLoss_difference", "LogLoss_CI_low", "LogLoss_CI_high")], row.names = FALSE, digits = 3)
   } else cat("row_predictions.csv or results.csv not found in", output_dir, "\n")
 }
 banner("INTERPRETATION DONE")
