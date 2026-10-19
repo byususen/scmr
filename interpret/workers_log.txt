@@ -1,0 +1,11 @@
+starting worker pid=6106 on localhost:11795 at 23:49:48.426
+starting worker pid=6105 on localhost:11795 at 23:49:48.426
+  [23:49] SCMR-EN-S G = 3 on all segments
+  [23:49] SCMR-EN-S G = 2 on all segments
+SCMR G=2 start=1 iteration=1 changes=0
+SCMR G=3 start=1 iteration=1 changes=0
+SCMR G=2 start=2 iteration=1 changes=0
+SCMR G=3 start=2 iteration=1 changes=0
+  [23:49] SCMR-EN-S G = 1 on all segments
+There were 13 warnings (use warnings() to see them)There were 31 warnings (use warnings() to see them)
+
