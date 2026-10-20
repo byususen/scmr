@@ -15,8 +15,9 @@
 #   E2_mapping    MAIN, spec S. 5-fold CV over whole KSA segments stratified
 #                 by regency; test segments are new locations (no survey).
 #   E1_nowcast    Spec D. Split f trains on months 1..T0 and predicts the next
-#                 six months at the survey points with the observed previous
-#                 phase; T0 = 18, 15, 12 for f = 1, 2, 3 (SCMR_E1_FOLDS).
+#                 months (at most six) at the survey points with the observed
+#                 previous phase; T0 = 18, 15, 21 for f = 1, 2, 3 (SCMR_E1_FOLDS).
+#                 (T0 = 12 is infeasible: a regime lacks some phases in 2021.)
 #   E3_imputation Spec D. 15% of monthly records hidden (a new random mask
 #                 for each split f = 1..5, SCMR_E3_FOLDS); imputed by exact
 #                 forward-backward under the fitted model (scmr_impute_waves),
@@ -74,7 +75,7 @@ if (nzchar(Sys.getenv("SCMR_FOLDS"))) prof$folds <- as.integer(strsplit(Sys.gete
 if (nzchar(Sys.getenv("SCMR_G_GRID"))) prof$G_grid <- as.integer(strsplit(Sys.getenv("SCMR_G_GRID"), ",")[[1]])
 n_folds <- 5L
 outer_seed <- 2026L
-train_months_E1 <- 18L           # split 1; split f uses 18 - 3 (f - 1)
+train_months_E1 <- c(18L, 15L, 21L)   # training months of splits 1, 2, 3
 test_months_E1 <- 6L
 mask_prop_E3 <- 0.15
 int_env <- function(nm, default) {
@@ -512,7 +513,7 @@ if ("E2_mapping" %in% designs_to_run) {
   for (f in prof$folds) run_split("E2_mapping", f, which(folds != f), which(folds == f), "S", "direct", prof$G_grid)
 }
 if ("E1_nowcast" %in% designs_to_run) for (f in folds_E1) {
-  T0 <- min(train_months_E1 - 3L * (f - 1L), max(dat$time) - 1L)
+  T0 <- min(train_months_E1[f], max(dat$time) - 1L)
   run_split("E1_nowcast", f, which(dat$time <= T0 & lagd$available),
             which(dat$time > T0 & dat$time <= T0 + test_months_E1 & lagd$available),
             "D", "lag_observed", prof$G_grid)

@@ -1,7 +1,7 @@
 # Ulangan E1 (nowcast) dan E3 (imputasi) dengan beberapa split, dalam 4 proses
 # R paralel. Split 1 adalah run v4 yang sudah ada dan dipakai ulang; yang
 # difit baru: E1 split 2 (latih bulan 1-15, uji 16-21), E1 split 3 (latih
-# 1-12, uji 13-18), dan E3 split 2-5 (penyembunyian acak 15% yang berbeda).
+# 1-21, uji 22-24), dan E3 split 2-5 (penyembunyian acak 15% yang berbeda).
 # Jalankan seluruh file ini (Ctrl+Shift+S di RStudio). Proses berjalan di latar
 # belakang; panggil status() untuk memantau. Perkiraan waktu: 8-10 jam.
 syntax_dir <- "C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax"
