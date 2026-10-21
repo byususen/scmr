@@ -14,9 +14,12 @@
 # Designs
 #   E2_mapping    MAIN, spec S. 5-fold CV over whole KSA segments stratified
 #                 by regency; test segments are new locations (no survey).
-#   E1_nowcast    Spec D. Train on months 1..18, predict months 19..24 at the
-#                 survey points with the observed previous phase.
-#   E3_imputation Spec D. 15% of monthly records hidden; imputed by exact
+#   E1_nowcast    Spec D. Split f trains on months 1..T0 and predicts the next
+#                 months (at most six) at the survey points with the observed
+#                 previous phase; T0 = 18, 15, 21 for f = 1, 2, 3 (SCMR_E1_FOLDS).
+#                 (T0 = 12 is infeasible: a regime lacks some phases in 2021.)
+#   E3_imputation Spec D. 15% of monthly records hidden (a new random mask
+#                 for each split f = 1..5, SCMR_E3_FOLDS); imputed by exact
 #                 forward-backward under the fitted model (scmr_impute_waves),
 #                 versus carry-forward.
 # Methods (suffix -S / -D = specification)
@@ -34,7 +37,8 @@
 # Fitted dynamic runs of v3c (same settings) are reused when their penalty
 # matches. Environment overrides: SCMR_SYNTAX_DIR, SCMR_DATA_FILE,
 # SCMR_OUTPUT_DIR, SCMR_PROFILE ("main", "pilot", "ci"), SCMR_DESIGNS,
-# SCMR_FOLDS, SCMR_G_GRID, SCMR_USE_GW, SCMR_USE_SCR.
+# SCMR_FOLDS (E2 folds), SCMR_E1_FOLDS, SCMR_E3_FOLDS (default "1"),
+# SCMR_G_GRID, SCMR_USE_GW, SCMR_USE_SCR.
 # =============================================================================
 
 # =============================================================================
@@ -71,8 +75,15 @@ if (nzchar(Sys.getenv("SCMR_FOLDS"))) prof$folds <- as.integer(strsplit(Sys.gete
 if (nzchar(Sys.getenv("SCMR_G_GRID"))) prof$G_grid <- as.integer(strsplit(Sys.getenv("SCMR_G_GRID"), ",")[[1]])
 n_folds <- 5L
 outer_seed <- 2026L
-train_months_E1 <- 18L
+train_months_E1 <- c(18L, 15L, 21L)   # training months of splits 1, 2, 3
+test_months_E1 <- 6L
 mask_prop_E3 <- 0.15
+int_env <- function(nm, default) {
+  v <- Sys.getenv(nm)
+  if (nzchar(v)) as.integer(strsplit(v, ",")[[1]]) else default
+}
+folds_E1 <- int_env("SCMR_E1_FOLDS", 1L)
+folds_E3 <- int_env("SCMR_E3_FOLDS", 1L)
 
 keep_vi_optical <- c("CI_red_edge", "EVI", "EVI2", "GNDVI", "MNDWI", "MSAVI",
                      "MSI", "NDRE", "NDVI", "NDWI", "NIRv", "PSRI")
@@ -248,7 +259,7 @@ X_of <- function(spec, rows, lag_filled = FALSE) {
 v3c_names <- c("Global-EN-D" = "Global-EN", "SCMR-EN-D" = "DSCMR-EN", "TwoStage-EN-D" = "TwoStage-EN",
                "SCMR-EN-D-phi1" = "DSCMR-EN-phi1", "SCR-original-D" = "SCR-original")
 reuse_from_v3c <- function(design, fold, model, G, ctx) {
-  if (!isTRUE(ctx$v3c_ok) || !model %in% names(v3c_names)) return(FALSE)
+  if (fold != 1L || !isTRUE(ctx$v3c_ok) || !model %in% names(v3c_names)) return(FALSE)
   old <- file.path(reuse_v3c, "runs", file_key(design, fold, v3c_names[[model]], G))
   if (!file.exists(old)) return(FALSE)
   b <- readRDS(old)
@@ -367,7 +378,7 @@ safe_run <- function(design, fold, model, G, ctx) {
 global_for <- function(design, fold, spec, train, seed) {
   name <- if (spec == "D") "global" else "globalS"
   gfile <- file.path(output_dir, "cache", sprintf("%s_fold%02d_%s.rds", design, fold, name))
-  if (!file.exists(gfile) && spec == "D") {
+  if (!file.exists(gfile) && spec == "D" && fold == 1L) {
     old <- file.path(reuse_cache_dirs, basename(gfile)); old <- old[file.exists(old)]
     if (length(old)) file.copy(old[1], gfile)
   }
@@ -421,7 +432,7 @@ tune_local <- function(design, fold, spec, train, lam_base, alp, seed, mode) {
 local_features <- function(design, fold, spec, train, global, seed, unit = FALSE) {
   name <- paste0(if (spec == "D") "features" else "featuresS", if (unit) "_unit" else "")
   ffile <- file.path(output_dir, "cache", sprintf("%s_fold%02d_%s.rds", design, fold, name))
-  if (!file.exists(ffile) && spec == "D" && !unit) {
+  if (!file.exists(ffile) && spec == "D" && !unit && fold == 1L) {
     old <- file.path(reuse_v3c, "cache", basename(ffile))
     if (file.exists(old)) file.copy(old, ffile)
   }
@@ -460,7 +471,7 @@ run_split <- function(design, fold, train, test, spec, mode, G_grid, y_obs = NUL
   # v3c runs are reusable when v3c used the same local penalty.
   v3c_ok <- FALSE
   old_t <- file.path(reuse_v3c, "cache", sprintf("%s_fold%02d_tuning.rds", design, fold))
-  if (spec == "D" && file.exists(old_t)) {
+  if (spec == "D" && fold == 1L && file.exists(old_t)) {
     ot <- readRDS(old_t)
     v3c_ok <- isTRUE(all.equal(ot$multiplier, tuned$multiplier)) && identical(ot$rule, membership_rule)
   }
@@ -501,19 +512,20 @@ if ("E2_mapping" %in% designs_to_run) {
   folds <- scmr_block_folds(dat$id_segmen, dat$regency, nfolds = n_folds, seed = outer_seed)
   for (f in prof$folds) run_split("E2_mapping", f, which(folds != f), which(folds == f), "S", "direct", prof$G_grid)
 }
-if ("E1_nowcast" %in% designs_to_run) {
-  T0 <- min(train_months_E1, max(dat$time) - 1L)
-  run_split("E1_nowcast", 1L, which(dat$time <= T0 & lagd$available), which(dat$time > T0 & lagd$available),
+if ("E1_nowcast" %in% designs_to_run) for (f in folds_E1) {
+  T0 <- min(train_months_E1[f], max(dat$time) - 1L)
+  run_split("E1_nowcast", f, which(dat$time <= T0 & lagd$available),
+            which(dat$time > T0 & dat$time <= T0 + test_months_E1 & lagd$available),
             "D", "lag_observed", prof$G_grid)
 }
-if ("E3_imputation" %in% designs_to_run) {
-  set.seed(outer_seed + 3L)
+if ("E3_imputation" %in% designs_to_run) for (f in folds_E3) {
+  set.seed(outer_seed + 3L + 100L * (f - 1L))   # split 1 keeps the original mask
   cand <- which(dat$time > min(dat$time))
   masked <- sort(sample(cand, round(mask_prop_E3 * length(cand))))
   prev_row <- match(paste(dat$id_subsegmen, dat$time - 1L), paste(dat$id_subsegmen, dat$time))
   train <- which(lagd$available & !(seq_len(nrow(dat)) %in% masked) & !(prev_row %in% masked))
   y_obs <- as.character(dat$phase); y_obs[masked] <- NA
-  run_split("E3_imputation", 1L, train, seq_len(nrow(dat)), "D", "impute", prof$G_grid, y_obs = y_obs)
+  run_split("E3_imputation", f, train, seq_len(nrow(dat)), "D", "impute", prof$G_grid, y_obs = y_obs)
   # Carry-forward baseline: last observed phase of the same sub-segment.
   cf <- character(length(masked))
   for (j in seq_along(masked)) {
@@ -524,10 +536,10 @@ if ("E3_imputation" %in% designs_to_run) {
   pm <- matrix(0, length(masked), length(class_levels), dimnames = list(NULL, class_levels))
   pm[cbind(seq_along(masked), match(cf, class_levels))] <- 1
   pm <- 0.98 * pm + 0.02 / length(class_levels)
-  cfres <- cbind(data.frame(Design = "E3_imputation", Fold = 1L, Seed = NA, Model = "CarryForward", Family = "CarryForward",
+  cfres <- cbind(data.frame(Design = "E3_imputation", Fold = f, Seed = NA, Model = "CarryForward", Family = "CarryForward",
                             Spec = "D", Variant = "", G = 0L, Mode = "impute", FitSec = 0),
                  metric_block(dat$phase[masked], pm, "Test"))
-  saveRDS(list(result = cfres), run_file("E3_imputation", 1L, "CarryForward", 0L))
+  saveRDS(list(result = cfres), run_file("E3_imputation", f, "CarryForward", 0L))
 }
 
 # =============================================================================
