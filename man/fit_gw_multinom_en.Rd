@@ -16,7 +16,9 @@ fit_gw_multinom_en(
   anchors = 300,
   val_prop = 0.2,
   type_multinomial = "ungrouped",
-  seed = 123
+  seed = 123,
+  lambda_grid = NULL,
+  tune_anchors = 100
 )
 
 \method{predict}{scmr_gw}(object, newx, new_coords, type = c("prob", "class"), ...)
@@ -44,6 +46,11 @@ fit_gw_multinom_en(
 \item{type_multinomial}{Passed to glmnet.}
 
 \item{seed}{Root random seed, or NULL to use the current RNG state.}
+
+\item{lambda_grid}{Optional candidate lambdas; when supplied, the bandwidth
+and lambda are chosen jointly by held-out log-loss (\code{lambda} is ignored).}
+
+\item{tune_anchors}{Maximum number of anchors used while tuning.}
 
 \item{object}{A fitted \code{scmr_gw} object.}
 

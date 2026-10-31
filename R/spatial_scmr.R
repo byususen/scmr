@@ -174,7 +174,11 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       as.numeric(scmr_potts_phi(w, unit_groups, G, phi, control$phi_max))
     }
     # Block coordinate ascent: phi | g, then repeatedly B | g, g | (B, phi), phi | g.
-    if (update) phi <- phi_step(unit_groups, phi)
+    # Optional phi annealing: phi is held at phi_warmup_value for the first
+    # `warm` sweeps and estimated afterwards.
+    warm <- if (label == "pl" && G > 1L) as.integer(control$phi_warmup_sweeps %||% 0L) else 0L
+    if (warm > 0L) phi <- control$phi_warmup_value %||% 0
+    if (update && warm == 0L) phi <- phi_step(unit_groups, phi)
     if (update) for (iter in seq_len(control$max_iter)) {
       fits <- fit_groups(groups, alpha, lam)
       old <- unit_groups
@@ -192,7 +196,12 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       reverted <- tiny && control$tiny_movement_revert
       if (reverted) unit_groups <- old
       groups <- unit_groups[unit_num]
-      phi <- phi_step(unit_groups, phi)
+      # End of warm-up: at the last warm-up sweep, or earlier if a warm-up sweep
+      # moved no unit. The alternation does not stop at that sweep, because the
+      # memberships have not yet been updated under the estimated phi.
+      released <- warm > 0L && (iter >= warm || sweep$changes == 0L)
+      if (warm == 0L || released) phi <- phi_step(unit_groups, phi)
+      if (released) warm <- 0L
       ll <- sum(sweep$row_ll[cbind(seq_len(nrow(data$x)), groups)])
       bonus <- spatial_bonus(w, unit_groups)
       lab <- label_term(w, unit_groups, phi, label, G)
@@ -205,7 +214,7 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
         Reverted = reverted)
       if (control$verbose) message("SCMR G=", G, " start=", start_id, " iteration=", iter,
                                    " changes=", sweep$changes)
-      if (sweep$changes == 0L || tiny) {
+      if ((sweep$changes == 0L || tiny) && !released) {
         membership_converged <- TRUE
         reason <- if (tiny) "tiny_membership_change" else "zero_membership_change"
         break

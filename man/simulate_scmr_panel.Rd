@@ -8,7 +8,7 @@ simulate_scmr_panel(
   n_units = 300,
   coords = NULL,
   n_time = 12,
-  pattern = c("irregular", "blocks", "global", "smooth"),
+  pattern = c("irregular", "blocks", "grid", "global", "smooth"),
   G = 3,
   n_classes = 6,
   p_active = 5,
@@ -16,12 +16,17 @@ simulate_scmr_panel(
   rho = 0.5,
   delta = 1,
   stay_range = c(0.2, 1.4),
-  seed = 1
+  seed = 1,
+  domain = c("square", "scr"),
+  grid = c(2, 3),
+  smooth_type = c("linear", "gp"),
+  dynamic = TRUE,
+  block_size = 1L,
+  block_spread = 0.02
 )
 }
 \arguments{
-\item{n_units}{Number of units when \code{coords} is not supplied (uniform on the
-unit square).}
+\item{n_units}{Number of units when \code{coords} is not supplied.}
 
 \item{coords}{Optional unit coordinates (one row per unit), for example the
 real survey locations.}
@@ -29,8 +34,9 @@ real survey locations.}
 \item{n_time}{Number of time points per unit.}
 
 \item{pattern}{Regime pattern: \code{"global"}, \code{"blocks"} (contiguous k-means
-regions), \code{"irregular"} (Latin-square tiles, disconnected regimes) or
-\code{"smooth"} (coefficients varying linearly in space, no regimes).}
+regions), \code{"grid"} (rectangular regions, \code{grid} = columns x rows; SCR
+scenario 1), \code{"irregular"} (Latin-square tiles, disconnected regimes) or
+\code{"smooth"} (coefficients varying in space, no regimes).}
 
 \item{G}{Number of regimes for \code{"blocks"} and \code{"irregular"}.}
 
@@ -45,11 +51,39 @@ regions), \code{"irregular"} (Latin-square tiles, disconnected regimes) or
 \item{stay_range}{Range of the regime-specific stay logits (calendar speed).}
 
 \item{seed}{Random seed; the caller's random state is restored.}
+
+\item{domain}{Where units are drawn when \code{coords} is not supplied: the unit
+square, or \code{"scr"}, the domain of Sugasawa and Murakami (2021):
+\eqn{[-1, 1] \times [0, 2]} without the ellipse
+\eqn{s_1^2 + 0.5 s_2^2 < 0.25}.}
+
+\item{grid}{Columns and rows of the \code{"grid"} pattern (G = product).}
+
+\item{smooth_type}{\code{"linear"} (coefficients linear in the coordinates) or
+\code{"gp"} (Gaussian-process fields with exponential covariance and ranges
+1, 2, 3, as in scenario 2 of the SCR reference code).}
+
+\item{dynamic}{If \code{TRUE} (default) classes follow the Markov model with
+regime transition logits; if \code{FALSE} they are conditionally independent
+over time given the features (static specification) with regime class
+intercepts.}
+
+\item{block_size}{Units per block. With \code{block_size > 1}, \code{n_units} is the
+number of blocks; each block is a square grid of \code{block_size} units
+(a perfect square, e.g. 9 = 3 x 3) spaced \code{block_spread} apart around the
+block centre, and all units of a block share the regime (like the 3 x 3
+sub-segments of a survey segment).}
+
+\item{block_spread}{Spacing of the units inside a block.}
 }
 \value{
 A list with \code{x} (features), \code{lag_x} (one-hot previous class), \code{y},
-\code{lag}, \code{unit_id}, \code{time}, \code{coords} (per row), \code{regime} (per row, \code{NA} for
-\code{"smooth"}), \code{unit_coords}, \code{unit_regime}, \code{beta} and \code{gamma}.
+\code{lag}, \code{unit_id}, \code{block_id}, \code{time}, \code{coords} (per row), \code{block_coords}
+(block centre per row), \code{regime} (per row, \code{NA} for \code{"smooth"}),
+\code{unit_coords}, \code{unit_regime}, \code{unit_block}, \code{beta}, \code{gamma} (transition
+logits, dynamic model), \code{alpha} (class intercepts, static model) and
+\code{unit_beta} (units x active features x classes, the true slopes of every
+unit, centred over classes).
 }
 \description{
 Simulate panel data from a spatially clustered multinomial Markov model

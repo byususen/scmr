@@ -12,7 +12,8 @@ scmr_filter_predict(
   new_coords = NULL,
   lag_columns,
   init = NULL,
-  membership = c("potts", "proportion", "majority")
+  membership = c("potts", "proportion", "majority"),
+  cluster_id = unit_id
 )
 }
 \arguments{
@@ -21,7 +22,8 @@ scmr_filter_predict(
 \item{newx}{Predictor matrix with the fitted columns; values in the lag
 columns are ignored.}
 
-\item{unit_id, time}{Unit and integer time index per row.}
+\item{unit_id, time}{Unit and integer time index per row (the unit whose
+class sequence is followed over time).}
 
 \item{new_coords}{Coordinates per row, needed for units not in training.}
 
@@ -31,6 +33,10 @@ columns are ignored.}
 initial probabilities (rows named by unit); defaults to training shares.}
 
 \item{membership}{Cluster-weight rule for unseen units (see \code{predict()}).}
+
+\item{cluster_id}{Spatial unit that carries the cluster label, per row;
+defaults to \code{unit_id}. Use it when labels were fitted for larger blocks
+(for example survey segments) than the observed sequences (sub-segments).}
 }
 \value{
 A probability matrix (rows of \code{newx}, classes in columns).
@@ -40,7 +46,7 @@ For a dynamic fit (lag columns among the predictors) and a unit observed
 over consecutive time points with features x_1, ..., x_T but no classes,
 the exact predictive probabilities under the fitted model are obtained by
 the forward recursion
-alpha_t(c) = sum_k p_g(c | k, x_t) alpha_{t-1}(k), computed per cluster and
+alpha_t(c) = sum_k p_g(c | k, x_t) alpha_(t-1)(k), computed per cluster and
 mixed with the unit's cluster weights. A gap in time restarts the recursion
 from the initial distribution.
 }

@@ -102,6 +102,14 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
   criteria$df_label <- df_label
   criteria$CriterionPLIC_BIC <- -2 * ll - 2 * logpl + log(n) * (df_eff + df_label)
   criteria$CriterionPLIC_AIC <- -2 * ll - 2 * logpl + 2 * (df_eff + df_label)
+  # Size-aware PLIC-BIC (regime-wise Laplace approximation): the coefficients
+  # of regime g are informed only by its own n_g rows (or m_g units), so each
+  # regime pays df_g * log(n_g) instead of df_g * log(N); phi pays log(B).
+  n_units <- criteria$n_units
+  criteria$CriterionPLIC_BIC_rows <- -2 * ll - 2 * logpl +
+    sum(parts$DFEffective_g * log(pmax(parts$NRowsCluster, 1))) + df_label * log(n_units)
+  criteria$CriterionPLIC_BIC_units <- -2 * ll - 2 * logpl +
+    sum(parts$DFEffective_g * log(pmax(parts$NUnitsCluster, 1))) + df_label * log(n_units)
   # Penalized objective actually maximized by the alternating algorithm.
   lambda_sum <- vapply(seq_len(g_total), function(g) {
     if (fits[[g]]$kind != "glmnet") return(0)

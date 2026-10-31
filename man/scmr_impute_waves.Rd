@@ -13,7 +13,8 @@ scmr_impute_waves(
   new_coords = NULL,
   lag_columns,
   init = NULL,
-  membership = c("potts", "proportion", "majority")
+  membership = c("potts", "proportion", "majority"),
+  cluster_id = unit_id
 )
 }
 \arguments{
@@ -24,7 +25,8 @@ columns are ignored.}
 
 \item{y}{Observed classes with \code{NA} for missing waves.}
 
-\item{unit_id, time}{Unit and integer time index per row.}
+\item{unit_id, time}{Unit and integer time index per row (the unit whose
+class sequence is followed over time).}
 
 \item{new_coords}{Coordinates per row, needed for units not in training.}
 
@@ -34,10 +36,16 @@ columns are ignored.}
 initial probabilities (rows named by unit); defaults to training shares.}
 
 \item{membership}{Cluster-weight rule for unseen units (see \code{predict()}).}
+
+\item{cluster_id}{Spatial unit that carries the cluster label, per row;
+defaults to \code{unit_id}. Use it when labels were fitted for larger blocks
+(for example survey segments) than the observed sequences (sub-segments).}
 }
 \value{
 A probability matrix with one row per input row (observed rows are
-indicator rows) and attribute \code{cluster_posterior} (units x clusters).
+indicator rows) and attribute \code{cluster_posterior} (units x clusters). When
+several units share a \code{cluster_id}, the cluster posterior pools the
+evidence of all of them.
 }
 \description{
 Rows with \code{NA} in \code{y} are imputed from the observed classes of the same unit

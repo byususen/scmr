@@ -63,6 +63,16 @@
 #'   shrinkage per observation for small clusters). The change of the penalty
 #'   multiplier is part of the exact membership gain, so the algorithm stays
 #'   monotone.
+#' @param phi_warmup_sweeps With `phi_update = "pl"`, number of initial
+#'   membership sweeps during which phi is held at `phi_warmup_value` instead of
+#'   being estimated (annealing). Weak spatial coupling early lets regimes form
+#'   from the likelihood before the Potts term freezes the initial boundaries.
+#'   phi is estimated after the warm-up (or as soon as a warm-up sweep moves no
+#'   unit), and the alternation continues; each phi-step is a maximization, so
+#'   the objective stays non-decreasing from that point. `max_iter` counts the
+#'   warm-up sweeps. Default 0 (no warm-up).
+#' @param phi_warmup_value phi used during the warm-up sweeps (default 0, i.e.
+#'   no spatial coupling).
 #' @param verbose Print iteration progress when true.
 #' @return A named list of control settings.
 #' @export
@@ -110,6 +120,8 @@ scmr_control <- function(
     phi_update = c("fixed", "pl"),
     phi_max = 20,
     penalty_size = c("common", "adaptive"),
+    phi_warmup_sweeps = 0L,
+    phi_warmup_value = 0,
     verbose = FALSE) {
   phi_update <- match.arg(phi_update)
   penalty_size <- match.arg(penalty_size)
@@ -162,6 +174,8 @@ scmr_control <- function(
     phi_update = phi_update,
     phi_max = phi_max,
     penalty_size = penalty_size,
+    phi_warmup_sweeps = phi_warmup_sweeps,
+    phi_warmup_value = phi_warmup_value,
     verbose = verbose
   )
   validate_scmr_control(out)
@@ -196,11 +210,15 @@ validate_scmr_control <- function(control) {
   }
   for (nm in c("phi", "lambda_1se_tol", "lambda_update_tol", "alpha_update_tol",
                "tiny_movement_max_units", "tiny_movement_rate_tol",
-               "criterion_balance_gamma", "selection_tol")) {
+               "criterion_balance_gamma", "selection_tol", "phi_warmup_value")) {
     z <- control[[nm]]
     if (length(z) != 1L || !is.finite(z) || z < 0) {
       stop(nm, " must be finite and nonnegative.", call. = FALSE)
     }
+  }
+  z <- control$phi_warmup_sweeps
+  if (length(z) != 1L || !is.finite(z) || z < 0 || z != floor(z)) {
+    stop("phi_warmup_sweeps must be a nonnegative integer.", call. = FALSE)
   }
   if (!is.null(control$start_methods) &&
       (!is.character(control$start_methods) || !length(control$start_methods) ||

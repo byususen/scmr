@@ -48,6 +48,8 @@ scmr_control(
   phi_update = c("fixed", "pl"),
   phi_max = 20,
   penalty_size = c("common", "adaptive"),
+  phi_warmup_sweeps = 0L,
+  phi_warmup_value = 0,
   verbose = FALSE
 )
 }
@@ -156,6 +158,18 @@ pseudo-likelihood after every membership sweep (see \code{\link[=scmr_potts_phi]
 shrinkage per observation for small clusters). The change of the penalty
 multiplier is part of the exact membership gain, so the algorithm stays
 monotone.}
+
+\item{phi_warmup_sweeps}{With \code{phi_update = "pl"}, number of initial
+membership sweeps during which phi is held at \code{phi_warmup_value} instead of
+being estimated (annealing). Weak spatial coupling early lets regimes form
+from the likelihood before the Potts term freezes the initial boundaries.
+phi is estimated after the warm-up (or as soon as a warm-up sweep moves no
+unit), and the alternation continues; each phi-step is a maximization, so
+the objective stays non-decreasing from that point. \code{max_iter} counts the
+warm-up sweeps. Default 0 (no warm-up).}
+
+\item{phi_warmup_value}{phi used during the warm-up sweeps (default 0, i.e.
+no spatial coupling).}
 
 \item{verbose}{Print iteration progress when true.}
 }
