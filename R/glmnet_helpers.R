@@ -36,7 +36,7 @@ get_s_index <- function(cvfit, s_rule) {
   which.min(abs(cvfit$lambda - s_val))
 }
 
-predict_multinom_prob <- function(fit, newx, s = NULL) {
+predict_multinom_prob <- function(fit, newx, s = NULL, newoffset = NULL) {
   s_use <- if (inherits(fit, "cv.glmnet")) {
     if (is.null(s)) "lambda.1se" else s
   } else {
@@ -45,7 +45,8 @@ predict_multinom_prob <- function(fit, newx, s = NULL) {
   # Linear predictors and a max-shifted softmax: glmnet's "response" can
   # overflow to NaN for large linear predictors (extrapolated local fits).
   loadNamespace("glmnet")                # predict methods for fits restored from disk
-  arr <- stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link")
+  arr <- if (is.null(newoffset)) stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link") else
+    stats::predict(fit, newx = glmnet_design(newx), s = s_use, type = "link", newoffset = newoffset)
   if (length(dim(arr)) == 3) {
     link <- matrix(arr[, , 1, drop = FALSE], nrow = dim(arr)[1],
                    ncol = dim(arr)[2], dimnames = dimnames(arr)[1:2])
@@ -87,7 +88,7 @@ glmnet_design <- function(x) {
 fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
                                     standardize = TRUE,
                                     type_multinomial = "grouped", maxit = 100000,
-                                    weights = NULL) {
+                                    weights = NULL, offset = NULL) {
   y <- factor(y, levels = class_levels)
   lambda <- as.numeric(lambda)[1]
   if (!is.finite(lambda) || lambda <= 0) stop("lambda must be positive.", call. = FALSE)
@@ -101,7 +102,7 @@ fit_fixed_lambda_glmnet <- function(x, y, alpha, lambda, class_levels,
     fit <- tryCatch(glmnet::glmnet(
       x = glmnet_design(x), y = y, family = "multinomial", alpha = alpha, lambda = path,
       standardize = standardize, type.multinomial = type_multinomial, maxit = maxit,
-      weights = weights %||% rep(1, nrow(x))), error = function(e) e)
+      weights = weights %||% rep(1, nrow(x)), offset = offset), error = function(e) e)
     if (inherits(fit, "error")) return(fit)
     if (!any(abs(fit$lambda - lambda) <= abs(lambda) * 1e-8)) {
       err <- simpleError("The glmnet path did not reach the requested lambda; inspect solver limits.")

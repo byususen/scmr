@@ -70,7 +70,7 @@ apply_pre_transform <- function(x, pre) {
   z
 }
 
-fit_local_engine <- function(x, y, penalty, alpha, lambda, control, pre = NULL) {
+fit_local_engine <- function(x, y, penalty, alpha, lambda, control, pre = NULL, base = NULL) {
   classes <- levels(y)
   if (any(table(factor(y, levels = classes)) == 0L)) {
     stop("Every fitted cluster must contain every response class.", call. = FALSE)
@@ -86,10 +86,13 @@ fit_local_engine <- function(x, y, penalty, alpha, lambda, control, pre = NULL) 
     raw <- withCallingHandlers(
       fit_fixed_lambda_glmnet(z, y, alpha, lambda, classes,
                              standardize, control$type_multinomial,
-                             maxit = control$glmnet_maxit), warning = capture_warning)
+                             maxit = control$glmnet_maxit,
+                             offset = if (is.null(base)) NULL else base_link(base, x)),
+      warning = capture_warning)
     engine <- engine_from_glmnet(raw, x, classes, alpha, raw$fixed_lambda %||% lambda, control, warnings)
     engine$standardize <- standardize
     engine$pre <- pre
+    engine$base <- base
     if (standardize) engine$x_sd <- make_pre_transform(z)$scale
     return(engine)
   }
@@ -114,7 +117,8 @@ engine_predict <- function(engine, newx) {
   if (!nrow(newx)) return(matrix(numeric(), 0L, length(engine$classes),
                                 dimnames = list(NULL, engine$classes)))
   if (engine$kind == "glmnet") {
-    p <- predict_multinom_prob(engine$fit, apply_pre_transform(newx, engine$pre), engine$lambda)
+    p <- predict_multinom_prob(engine$fit, apply_pre_transform(newx, engine$pre), engine$lambda,
+                               if (is.null(engine$base)) NULL else base_link(engine$base, newx))
   } else {
     z <- sweep(sweep(newx, 2, engine$center, "-"), 2, engine$scale, "/")
     colnames(z) <- paste0("V", seq_len(ncol(newx)))
@@ -129,7 +133,7 @@ engine_predict <- function(engine, newx) {
   normalize_prob_matrix(p, engine$classes, nrow(newx))
 }
 
-engine_coef <- function(engine, parameterization = c("native", "sum_to_zero")) {
+engine_coef <- function(engine, parameterization = c("native", "sum_to_zero"), include_base = TRUE) {
   parameterization <- match.arg(parameterization)
   out <- matrix(0, length(engine$classes), length(engine$features) + 1L,
                 dimnames = list(engine$classes, c("(Intercept)", engine$features)))
@@ -152,8 +156,36 @@ engine_coef <- function(engine, parameterization = c("native", "sum_to_zero")) {
     out[, 1] <- out[, 1] - as.numeric(slopes %*% (engine$center / engine$scale))
     out[, -1] <- sweep(slopes, 2, engine$scale, "/")
   }
+  # Shared-base regimes: the engine holds the deviation delta_g; the regime
+  # coefficients are beta_0 + delta_g.
+  if (include_base && !is.null(engine$base)) out <- out + engine$base$coef_raw[rownames(out), colnames(out)]
   if (parameterization == "sum_to_zero") out <- sweep(out, 2, colMeans(out), "-")
   out
+}
+
+# Shared base model beta_0 for deviation-parameterized regimes: a penalized
+# multinomial fit on all rows, used as a fixed offset by every regime, so each
+# regime estimates only its (sparse) deviation delta_g = beta_g - beta_0.
+make_base_model <- function(x, y, alpha, lambda, control, pre = NULL) {
+  eng <- fit_local_engine(x, y, "elastic_net", alpha, lambda, control, pre)
+  cf <- stats::coef(eng$fit, s = eng$lambda)
+  coef_fit <- do.call(rbind, lapply(eng$classes, function(cl) as.numeric(cf[[cl]][c("(Intercept)", eng$features), 1])))
+  dimnames(coef_fit) <- list(eng$classes, c("(Intercept)", eng$features))
+  edf <- engine_effective_df(eng, x, control$selection_tol)
+  list(coef_fit = coef_fit, pre = eng$pre, standardize = eng$standardize,
+       coef_raw = engine_coef(eng), df = edf$df, lambda = eng$lambda, alpha = alpha)
+}
+
+# Linear predictor of the base model on the scale the regime engines are fitted on.
+base_link <- function(base, x) {
+  x <- as.matrix(x)
+  if (!is.null(base$pre)) {
+    z <- apply_pre_transform(x, base$pre)
+    return(cbind(1, z) %*% t(base$coef_fit))
+  }
+  # Without a global pre-transform glmnet reports coefficients on the input
+  # scale, so the raw-scale coefficients apply directly.
+  cbind(1, x) %*% t(base$coef_raw)
 }
 
 # Elastic-net penalty P_alpha(B_g) on the solver's fitting scale (unscaled by lambda).

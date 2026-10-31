@@ -123,11 +123,13 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
     if (adaptive) function(n) kappa * sqrt(pmax(n, 0) / n_bar) else function(n) rep(kappa, length(n))
   }
 
+  use_base <- sum_scale && identical(control$base_model %||% "none", "global")
+  base <- NULL
   fit_groups <- function(groups, alpha, lambda) {
     lapply(seq_len(G), function(g) {
       idx <- which(groups == g)
       lam <- if (penalty == "none") NA_real_ else if (sum_scale) kappa_fun(lambda[g])(length(idx)) / length(idx) else lambda[g]
-      engine <- fit_local_engine(data$x[idx, , drop = FALSE], data$y[idx], penalty, alpha, lam, control, pre)
+      engine <- fit_local_engine(data$x[idx, , drop = FALSE], data$y[idx], penalty, alpha, lam, control, pre, base)
       engine$n_fit <- length(idx)
       engine
     })
@@ -162,6 +164,10 @@ fit_partition_core <- function(data, model, penalty, G, groups, fixed_levels,
       if (is.null(shared)) shared <<- list(alpha = alpha, kappa = mean(lam) * nrow(data$x) / G)
       alpha <- shared$alpha
       lam <- rep(shared$kappa, G)
+      # Shared base model, fitted once with the single-regime strength.
+      if (use_base && is.null(base)) {
+        base <<- make_base_model(data$x, data$y, alpha, shared$kappa * G / nrow(data$x), control, pre)
+      }
     }
     iterations <- list()
     membership_converged <- !update

@@ -60,8 +60,11 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
   parts$CBAIC_UnitPenalty_c <- 2 * parts$DFEffective_g
   parts$CBAIC_Component_c <- parts$CBBIC_WeightedNeg2LogLik_c + parts$CBAIC_UnitPenalty_c
   ll <- sum(assigned)
+  # Shared-base regimes: the base model's EDF is added once; it is informed by
+  # all N rows.
+  df_base <- fits[[1]]$base$df %||% 0
   df_orig <- sum(parts$DFOriginal_g)
-  df_eff <- sum(parts$DFEffective_g)
+  df_eff <- sum(parts$DFEffective_g) + df_base
   cb_fit <- sum(parts$CBBIC_WeightedNeg2LogLik_c)
   cb_pen <- sum(parts$CBBIC_UnitPenalty_c)
   bonus <- spatial_bonus(w, group_unit)
@@ -106,9 +109,10 @@ scmr_fit_criteria <- function(fits, x, y, row_group, unit_id, control,
   # of regime g are informed only by its own n_g rows (or m_g units), so each
   # regime pays df_g * log(n_g) instead of df_g * log(N); phi pays log(B).
   n_units <- criteria$n_units
-  criteria$CriterionPLIC_BIC_rows <- -2 * ll - 2 * logpl +
+  criteria$df_base <- df_base
+  criteria$CriterionPLIC_BIC_rows <- -2 * ll - 2 * logpl + df_base * log(n) +
     sum(parts$DFEffective_g * log(pmax(parts$NRowsCluster, 1))) + df_label * log(n_units)
-  criteria$CriterionPLIC_BIC_units <- -2 * ll - 2 * logpl +
+  criteria$CriterionPLIC_BIC_units <- -2 * ll - 2 * logpl + df_base * log(criteria$n_units) +
     sum(parts$DFEffective_g * log(pmax(parts$NUnitsCluster, 1))) + df_label * log(n_units)
   # Penalized objective actually maximized by the alternating algorithm.
   lambda_sum <- vapply(seq_len(g_total), function(g) {

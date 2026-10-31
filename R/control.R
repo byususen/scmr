@@ -73,6 +73,15 @@
 #'   warm-up sweeps. Default 0 (no warm-up).
 #' @param phi_warmup_value phi used during the warm-up sweeps (default 0, i.e.
 #'   no spatial coupling).
+#' @param base_model `"none"` (each regime has its own coefficients) or
+#'   `"global"` (shared-base parameterization beta_g = beta_0 + delta_g: a
+#'   penalized global fit beta_0 on all rows enters every regime as a fixed
+#'   offset and each regime estimates only its deviation delta_g, so the
+#'   elastic-net penalty shrinks regimes towards the global model and a regime
+#'   that differs in a few coefficients pays only for those). Requires
+#'   `lambda_scale = "sum"` and a penalized engine; the base uses the
+#'   single-regime strength lambda = kappa * G / N. The information criteria add
+#'   the base model's effective degrees of freedom.
 #' @param verbose Print iteration progress when true.
 #' @return A named list of control settings.
 #' @export
@@ -122,9 +131,11 @@ scmr_control <- function(
     penalty_size = c("common", "adaptive"),
     phi_warmup_sweeps = 0L,
     phi_warmup_value = 0,
+    base_model = c("none", "global"),
     verbose = FALSE) {
   phi_update <- match.arg(phi_update)
   penalty_size <- match.arg(penalty_size)
+  base_model <- match.arg(base_model)
   weight_type <- match.arg(weight_type)
   init_method <- match.arg(init_method)
   lambda_scale <- match.arg(lambda_scale)
@@ -176,6 +187,7 @@ scmr_control <- function(
     penalty_size = penalty_size,
     phi_warmup_sweeps = phi_warmup_sweeps,
     phi_warmup_value = phi_warmup_value,
+    base_model = base_model,
     verbose = verbose
   )
   validate_scmr_control(out)
@@ -192,7 +204,7 @@ validate_scmr_control <- function(control) {
   choices <- list(weight_type = c("binary", "exp"), init_method = c("kmeans", "random", "coefficient"),
     update_order = c("random", "fixed"), lambda_rule = c("lambda.min", "lambda.1se"),
     type_multinomial = c("grouped", "ungrouped"), phi_update = c("fixed", "pl"),
-    penalty_size = c("common", "adaptive"))
+    penalty_size = c("common", "adaptive"), base_model = c("none", "global"))
   for (nm in names(choices)) {
     if (length(control[[nm]]) != 1L || !control[[nm]] %in% choices[[nm]]) stop("Invalid ", nm, call. = FALSE)
   }

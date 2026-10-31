@@ -12,7 +12,7 @@ multinomial_hessian <- function(z, prob) {
 }
 
 engine_effective_df <- function(engine, x, tol = 1e-8) {
-  native <- engine_coef(engine)
+  native <- engine_coef(engine, include_base = FALSE)
   slopes <- native[, -1, drop = FALSE]
   selected <- abs(slopes) > tol
   k <- nrow(native)

@@ -72,3 +72,28 @@ test_that("split-merge path recovers a small regime and records every candidate"
   expect_null(q$fits[[2]]$fits)
   expect_length(q$fits[[2]]$group_unit, 100L)
 })
+
+test_that("shared-base regimes add the base offset everywhere it is needed", {
+  expect_error(scmr_control(base_model = "local"))
+  d <- sim_block_regimes()
+  f <- fit_scmr(d$x, d$y, G = 3, unit_id = d$id, coords = d$coords, alpha = 0.5, lambda = 0.01,
+                control = path_control(base_model = "global"), seed = 3)
+  base <- f$fits[[1]]$base
+  expect_false(is.null(base))
+  expect_identical(f$fits[[2]]$base, base)
+  # Regime coefficients are beta_0 + delta_g and reproduce the fitted probabilities.
+  for (g in seq_len(f$G)) {
+    eng <- f$fits[[g]]
+    delta <- scmr:::engine_coef(eng, include_base = FALSE)
+    expect_equal(scmr:::engine_coef(eng), delta + base$coef_raw)
+    idx <- which(f$row_group == g)
+    eta <- cbind(1, d$x[idx, ]) %*% t(scmr:::engine_coef(eng))
+    pr <- exp(eta - apply(eta, 1, max))
+    expect_equal(unname(pr / rowSums(pr)), unname(f$prob_train[idx, ]), tolerance = 1e-6)
+  }
+  cr <- f$criteria
+  expect_gt(cr$df_base, 0)
+  expect_equal(cr$df_effective_total, sum(cr$cluster_components$DFEffective_g) + cr$df_base)
+  # The monotone alternation is unchanged: the base is a fixed offset.
+  expect_true(all(diff(f$obj_trace$PenalizedObjective) >= -1e-6))
+})

@@ -50,6 +50,7 @@ scmr_control(
   penalty_size = c("common", "adaptive"),
   phi_warmup_sweeps = 0L,
   phi_warmup_value = 0,
+  base_model = c("none", "global"),
   verbose = FALSE
 )
 }
@@ -170,6 +171,16 @@ warm-up sweeps. Default 0 (no warm-up).}
 
 \item{phi_warmup_value}{phi used during the warm-up sweeps (default 0, i.e.
 no spatial coupling).}
+
+\item{base_model}{\code{"none"} (each regime has its own coefficients) or
+\code{"global"} (shared-base parameterization beta_g = beta_0 + delta_g: a
+penalized global fit beta_0 on all rows enters every regime as a fixed
+offset and each regime estimates only its deviation delta_g, so the
+elastic-net penalty shrinks regimes towards the global model and a regime
+that differs in a few coefficients pays only for those). Requires
+\code{lambda_scale = "sum"} and a penalized engine; the base uses the
+single-regime strength lambda = kappa * G / N. The information criteria add
+the base model's effective degrees of freedom.}
 
 \item{verbose}{Print iteration progress when true.}
 }
