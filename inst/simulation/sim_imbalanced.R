@@ -1,6 +1,6 @@
 # =============================================================================
 # KSA-like imbalanced regimes: does the criterion find G, and does the
-# split-merge path beat the multi-start fit?  (pilot)
+# split-merge path beat the multi-start fit?
 #
 # Blocks on a side x side grid, n_b rows per block, p predictors (first 6
 # active), K = 4 classes. Regimes are contiguous; shares are imbalanced.
@@ -8,20 +8,29 @@
 #   null : G = 1
 #   s3   : shares 0.60 / 0.30 / 0.10
 #   s4   : shares 0.55 / 0.30 / 0.10 / 0.05
+#   s4t  : shares 0.60 / 0.28 / 0.10 / 0.02 (tiny regime)
+# Regime deviations from the base coefficients (env SIM_DEV):
+#   dense  : 3 active slopes x 2 classes (+/- delta) and intercept shifts
+#   sparse : intercept shifts (+/- delta) for 2 classes and one slope for 1 class
+# Other env: SIM_SIDE, SIM_NB, SIM_P, SIM_REPS, SIM_REP0 (first replicate),
+# SIM_GMAX, SIM_DELTA, SIM_WARM (phi warm-up sweeps), SIM_BASE (none/global),
+# SIM_CORES, SIM_OUT, SIM_STANDARD (1 = also run the multi-start fits).
 # Methods, each over G = 1..G_max:
 #   standard : fit_scmr with n_starts = 3 (kmeans, coefficient, kmeans)
 #   path     : scmr_split_merge_path (score splits + backward merges)
 # Output: one row per replicate x scenario x method x G (criteria, objective,
-# ARI vs truth, seconds) in SIM_OUT (default sim_imbalanced_pilot.csv).
+# ARI vs truth, seconds) in SIM_OUT (default sim_imbalanced.csv).
 # =============================================================================
 suppressMessages(library(scmr))
 env_int <- function(k, d) as.integer(Sys.getenv(k, d))
 side <- env_int("SIM_SIDE", "20"); n_b <- env_int("SIM_NB", "12"); p <- env_int("SIM_P", "20")
-reps <- env_int("SIM_REPS", "6"); G_max <- env_int("SIM_GMAX", "5"); delta <- as.numeric(Sys.getenv("SIM_DELTA", "1"))
+reps <- env_int("SIM_REPS", "6"); rep0 <- env_int("SIM_REP0", "1"); G_max <- env_int("SIM_GMAX", "5"); delta <- as.numeric(Sys.getenv("SIM_DELTA", "1"))
 warm <- env_int("SIM_WARM", "0"); cores <- env_int("SIM_CORES", "2")
 base_model <- Sys.getenv("SIM_BASE", "none")
+dev_type <- Sys.getenv("SIM_DEV", "dense")
+run_standard <- env_int("SIM_STANDARD", "1") == 1L
 scens <- strsplit(Sys.getenv("SIM_SCEN", "null,s3,s4"), ",")[[1]]
-out_file <- Sys.getenv("SIM_OUT", "sim_imbalanced_pilot.csv")
+out_file <- Sys.getenv("SIM_OUT", "sim_imbalanced.csv")
 K <- 4L; cls <- letters[1:K]
 
 ari <- function(a, b) {
@@ -56,7 +65,8 @@ make_regimes <- function(shares, seed) {
   lab
 }
 make_data <- function(scen, seed) {
-  shares <- switch(scen, null = 1, s3 = c(.60, .30, .10), s4 = c(.55, .30, .10, .05))
+  shares <- switch(scen, null = 1, s3 = c(.60, .30, .10), s4 = c(.55, .30, .10, .05),
+                   s4t = c(.60, .28, .10, .02))
   reg <- make_regimes(shares, seed)
   set.seed(seed + 1L)
   G <- length(shares); B <- side^2
@@ -64,9 +74,16 @@ make_data <- function(scen, seed) {
   base[-1, 1] <- stats::rnorm(K - 1, 0, 0.3)
   betas <- lapply(seq_len(G), function(g) {
     if (g == 1L) return(base)
-    b <- base; j <- sample(2:7, 3); k <- sample(2:K, 2)
-    b[k, j] <- b[k, j] + delta * matrix(sample(c(-1, 1), length(k) * 3, TRUE), length(k))
-    b[k, 1] <- b[k, 1] + stats::rnorm(length(k), 0, 0.5 * delta)
+    b <- base; k <- sample(2:K, 2)
+    if (dev_type == "sparse") {
+      b[k, 1] <- b[k, 1] + delta * sample(c(-1, 1), 2, TRUE)
+      j <- sample(2:7, 1)
+      b[k[1], j] <- b[k[1], j] + delta * sample(c(-1, 1), 1)
+    } else {
+      j <- sample(2:7, 3)
+      b[k, j] <- b[k, j] + delta * matrix(sample(c(-1, 1), length(k) * 3, TRUE), length(k))
+      b[k, 1] <- b[k, 1] + stats::rnorm(length(k), 0, 0.5 * delta)
+    }
     b
   })
   x <- matrix(stats::rnorm(B * n_b * p), ncol = p, dimnames = list(NULL, paste0("x", 1:p)))
@@ -86,7 +103,7 @@ ctrl_of <- function(n_starts) scmr_control(lambda_scale = "sum", phi_update = "p
 
 one <- function(job) {
   scen <- job$scen; rep <- job$rep
-  d <- make_data(scen, 1000L * rep + match(scen, c("null", "s3", "s4")))
+  d <- make_data(scen, 1000L * rep + match(scen, c("null", "s3", "s4", "s4t")))
   units <- sort(unique(d$id)); truth <- d$reg[match(units, sprintf("B%04d", seq_len(side^2)))]
   gl <- fit_scmr(d$x, d$y, model = "global", penalty = "elastic_net", alpha = 0.5, nfolds = 5, seed = rep)
   lam <- gl$lambda_used[1]
@@ -94,13 +111,14 @@ one <- function(job) {
   add <- function(method, G, f, sec) {
     cr <- f$criteria; st <- f$diagnostics$starts
     obj <- if (is.null(st) || !nrow(st)) cr$PenalizedObjective else st$Objective[which(st$Selected)[1]]
-    rows[[length(rows) + 1L]] <<- data.frame(Scenario = scen, Rep = rep, TrueG = d$G, Method = method, G = G,
+    rows[[length(rows) + 1L]] <<- data.frame(Scenario = scen, Dev = dev_type, Warm = warm, Base = base_model,
+      B = side^2, Rep = rep, TrueG = d$G, Method = method, G = G,
       Objective = obj, PLIC_AIC = cr$CriterionPLIC_AIC, PLIC_BIC = cr$CriterionPLIC_BIC,
       PLIC_BIC_rows = cr$CriterionPLIC_BIC_rows, PLIC_BIC_units = cr$CriterionPLIC_BIC_units,
       DF = cr$df_effective_total, Phi = f$phi %||% NA_real_, ARI = ari(truth, f$group_unit[units]),
       MinUnits = min(table(f$group_unit)), Seconds = sec, Lambda = lam)
   }
-  for (G in seq_len(G_max)) {
+  if (run_standard) for (G in seq_len(G_max)) {
     t0 <- proc.time()[["elapsed"]]
     f <- tryCatch(fit_scmr(d$x, d$y, model = "scmr", G = G, unit_id = d$id, coords = d$coords, alpha = 0.5,
                            lambda = lam, control = ctrl_of(3L), seed = rep), error = function(e) NULL)
@@ -114,7 +132,7 @@ one <- function(job) {
   do.call(rbind, rows)
 }
 `%||%` <- function(a, b) if (is.null(a)) b else a
-jobs <- unlist(lapply(seq_len(reps), function(r) lapply(scens, function(s) list(scen = s, rep = r))), recursive = FALSE)
+jobs <- unlist(lapply(rep0 - 1L + seq_len(reps), function(r) lapply(scens, function(s) list(scen = s, rep = r))), recursive = FALSE)
 res <- parallel::mclapply(jobs, function(j) tryCatch(one(j), error = function(e) {
   message("job ", j$scen, " rep ", j$rep, " failed: ", conditionMessage(e)); NULL }), mc.cores = cores)
 res <- do.call(rbind, res)
@@ -130,9 +148,11 @@ agg <- aggregate(cbind(Correct = ChosenG == TrueG, Over = ChosenG > TrueG, ARI) 
                  data = sel, FUN = mean)
 print(agg[order(agg$Scenario, agg$Criterion, agg$Method), ], row.names = FALSE, digits = 3)
 tg <- res[res$G == res$TrueG, ]
-cmp <- reshape(tg[, c("Scenario", "Rep", "Method", "Objective", "ARI")], idvar = c("Scenario", "Rep"),
-               timevar = "Method", direction = "wide")
-cat("\nAt the true G: path minus standard objective and ARI\n")
-print(aggregate(cbind(dObj = Objective.path - Objective.standard, ARI.path, ARI.standard) ~ Scenario, cmp, mean), digits = 3)
+if (length(unique(tg$Method)) == 2L) {
+  cmp <- reshape(tg[, c("Scenario", "Rep", "Method", "Objective", "ARI")], idvar = c("Scenario", "Rep"),
+                 timevar = "Method", direction = "wide")
+  cat("\nAt the true G: path minus standard objective and ARI\n")
+  print(aggregate(cbind(dObj = Objective.path - Objective.standard, ARI.path, ARI.standard) ~ Scenario, cmp, mean), digits = 3)
+}
 cat("\nSeconds per replicate (all G):\n")
 print(aggregate(Seconds ~ Scenario + Method, res, sum), digits = 3)
