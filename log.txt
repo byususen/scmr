@@ -1,0 +1,18 @@
+ Scenario   Method      Criterion Correct Over   ARI
+       s4     path       PLIC_AIC    0.70 0.12 0.775
+       s4 standard       PLIC_AIC    0.28 0.42 0.652
+       s4     path       PLIC_BIC    0.02 0.00 0.692
+       s4 standard       PLIC_BIC    0.02 0.00 0.620
+       s4     path  PLIC_BIC_rows    0.14 0.00 0.740
+       s4 standard  PLIC_BIC_rows    0.06 0.00 0.675
+       s4     path PLIC_BIC_units    0.36 0.00 0.812
+       s4 standard PLIC_BIC_units    0.10 0.04 0.721
+
+At the true G: path minus standard objective and ARI
+  Scenario dObj ARI.path ARI.standard
+1       s4 35.7    0.745        0.596
+
+Seconds per replicate (all G):
+  Scenario   Method Seconds
+1       s4     path    3163
+2       s4 standard    3668
