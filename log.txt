@@ -1,0 +1,18 @@
+ Scenario   Method      Criterion Correct Over   ARI
+       s3     path       PLIC_AIC    0.70 0.30 0.859
+       s3 standard       PLIC_AIC    0.48 0.50 0.757
+       s3     path       PLIC_BIC    0.74 0.00 0.900
+       s3 standard       PLIC_BIC    0.58 0.02 0.849
+       s3     path  PLIC_BIC_rows    0.78 0.02 0.911
+       s3 standard  PLIC_BIC_rows    0.68 0.08 0.858
+       s3     path PLIC_BIC_units    0.92 0.02 0.931
+       s3 standard PLIC_BIC_units    0.72 0.18 0.850
+
+At the true G: path minus standard objective and ARI
+  Scenario dObj ARI.path ARI.standard
+1       s3   37    0.926        0.835
+
+Seconds per replicate (all G):
+  Scenario   Method Seconds
+1       s3     path    1374
+2       s3 standard    1859
