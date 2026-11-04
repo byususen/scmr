@@ -39,6 +39,17 @@
 #' @param init_features Optional coefficient features for the standard starts.
 #' @param keep_fits If `FALSE`, keep only memberships and criteria per G.
 #' @param verbose Print progress.
+#' @param split_rule How split proposals are formed: `"kmeans"` (2-means of
+#'   the smoothed, projected block score vectors), `"scan"` (connected
+#'   subregions of a regime grown by beam search on the spatial graph and ranked
+#'   by intercept and slope score statistics), or `"both"`.
+#' @param scan_n Number of scan proposals fitted per G.
+#' @param scan_max_size Largest scan region (units).
+#' @param scan_anchors Maximum number of anchor units per regime (half chosen by
+#'   their single-unit statistic, half at random).
+#' @param scan_beam Beam width per anchor and channel.
+#' @param scan_ridge Ridge added to the information in the score statistics.
+#' @param scan_jaccard Maximum Jaccard overlap between selected scan regions.
 #' @return An object of class `scmr_path`: `fits` (list by G), `table` (one row
 #'   per G with the objective, the information criteria and the origin of the
 #'   kept fit), `log` (every candidate fit), `selected` (G chosen by each
@@ -49,8 +60,12 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
                                   alpha = NULL, lambda = NULL, control = scmr_control(),
                                   seed = 123, n_split = 2L, n_merge = 2L, proj_dim = 24L,
                                   smooth = TRUE, merge_back = TRUE, standard_starts = FALSE,
-                                  init_features = NULL, keep_fits = TRUE, verbose = FALSE) {
+                                  init_features = NULL, keep_fits = TRUE, verbose = FALSE,
+                                  split_rule = c("kmeans", "scan", "both"), scan_n = 2L,
+                                  scan_max_size = 60L, scan_anchors = 100L, scan_beam = 4L,
+                                  scan_ridge = 0.01, scan_jaccard = 0.6) {
   penalty <- match.arg(penalty)
+  split_rule <- match.arg(split_rule)
   t_start <- proc.time()[["elapsed"]]
   if (penalty != "none" && (is.null(lambda) || !identical(control$lambda_scale, "sum"))) {
     warning("Objectives are comparable across candidate fits only with a supplied lambda ",
@@ -117,7 +132,53 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
     Wg <- Matrix::sparseMatrix(i = e$i[keep], j = e$j[keep], x = e$x[keep], dims = c(m, m))
     as.matrix((S + Wg %*% S) / (1 + Matrix::rowSums(Wg)))
   }
+  # Scan-type proposals: connected high-score subregions of a regime.
+  scan_proposals <- function(f, G_new) {
+    ug <- unit_groups(f)
+    if (is.null(f$W)) return(list())
+    sc <- scan_unit_scores(X1, Y, f$prob_train, unit_num, m)
+    e <- Matrix::summary(methods::as(f$W, "generalMatrix"))
+    nb <- split(e$j, factor(e$i, levels = seq_len(m)))
+    single <- scan_channel_stats(sc$U, sc$V, sc$d, sc$K, scan_ridge)
+    props <- list()
+    for (g in seq_len(G_new - 1L)) {
+      idx <- which(ug == g)
+      top <- min(length(idx) - control$min_units, scan_max_size)
+      if (top < control$min_units) next
+      sizes <- control$min_units:top
+      anchors <- if (length(idx) <= scan_anchors) idx else {
+        h <- ceiling(scan_anchors / 2)
+        best <- idx[order(-apply(single[idx, , drop = FALSE], 1L, max))][seq_len(h)]
+        rest <- setdiff(idx, best)
+        c(best, with_scmr_seed(scmr_seed(seed, 7100 + 31L * g + G_new),
+                               rest[sample.int(length(rest), min(length(rest), scan_anchors - h))]))
+      }
+      found <- scan_regime_regions(sc, idx, nb, sizes, anchors, scan_beam, scan_ridge)
+      for (r in scan_select_regions(found, 3L * scan_n, scan_jaccard)) {
+        lab <- ug; lab[r$members] <- G_new
+        if (!feasible(lab, G_new)) next
+        props[[length(props) + 1L]] <- list(regime = g, rule = paste0("scan-", r$channel),
+                                            labels = lab, score = r$score)
+      }
+    }
+    if (!length(props)) return(props)
+    props <- props[order(-vapply(props, function(z) z$score, numeric(1)))]
+    # Keep the best proposals with at most two per regime.
+    keep <- integer(); per <- integer(G_new)
+    for (i in seq_along(props)) {
+      g <- props[[i]]$regime
+      if (per[g] >= 2L) next
+      keep <- c(keep, i); per[g] <- per[g] + 1L
+      if (length(keep) >= scan_n) break
+    }
+    props[keep]
+  }
   split_proposals <- function(f, G_new) {
+    if (split_rule == "scan") return(scan_proposals(f, G_new))
+    if (split_rule == "both") return(c(kmeans_proposals(f, G_new), scan_proposals(f, G_new)))
+    kmeans_proposals(f, G_new)
+  }
+  kmeans_proposals <- function(f, G_new) {
     ug <- unit_groups(f)
     S <- smooth_scores(unit_scores(f), ug, f$W)
     G_old <- G_new - 1L

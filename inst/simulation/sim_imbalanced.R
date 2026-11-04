@@ -14,7 +14,8 @@
 #   sparse : intercept shifts (+/- delta) for 2 classes and one slope for 1 class
 # Other env: SIM_SIDE, SIM_NB, SIM_P, SIM_REPS, SIM_REP0 (first replicate),
 # SIM_GMAX, SIM_DELTA, SIM_WARM (phi warm-up sweeps), SIM_BASE (none/global),
-# SIM_CORES, SIM_OUT, SIM_STANDARD (1 = also run the multi-start fits).
+# SIM_CORES, SIM_OUT, SIM_STANDARD (1 = also run the multi-start fits),
+# SIM_SPLIT (path split rule: kmeans, scan or both).
 # Methods, each over G = 1..G_max:
 #   standard : fit_scmr with n_starts = 3 (kmeans, coefficient, kmeans)
 #   path     : scmr_split_merge_path (score splits + backward merges)
@@ -29,6 +30,7 @@ warm <- env_int("SIM_WARM", "0"); cores <- env_int("SIM_CORES", "2")
 base_model <- Sys.getenv("SIM_BASE", "none")
 dev_type <- Sys.getenv("SIM_DEV", "dense")
 run_standard <- env_int("SIM_STANDARD", "1") == 1L
+split_rule <- Sys.getenv("SIM_SPLIT", "kmeans")
 scens <- strsplit(Sys.getenv("SIM_SCEN", "null,s3,s4"), ",")[[1]]
 out_file <- Sys.getenv("SIM_OUT", "sim_imbalanced.csv")
 K <- 4L; cls <- letters[1:K]
@@ -111,7 +113,7 @@ one <- function(job) {
   add <- function(method, G, f, sec) {
     cr <- f$criteria; st <- f$diagnostics$starts
     obj <- if (is.null(st) || !nrow(st)) cr$PenalizedObjective else st$Objective[which(st$Selected)[1]]
-    rows[[length(rows) + 1L]] <<- data.frame(Scenario = scen, Dev = dev_type, Warm = warm, Base = base_model,
+    rows[[length(rows) + 1L]] <<- data.frame(Scenario = scen, Dev = dev_type, Warm = warm, Base = base_model, Split = split_rule,
       B = side^2, Rep = rep, TrueG = d$G, Method = method, G = G,
       Objective = obj, PLIC_AIC = cr$CriterionPLIC_AIC, PLIC_BIC = cr$CriterionPLIC_BIC,
       PLIC_BIC_rows = cr$CriterionPLIC_BIC_rows, PLIC_BIC_units = cr$CriterionPLIC_BIC_units,
@@ -126,7 +128,8 @@ one <- function(job) {
   }
   t0 <- proc.time()[["elapsed"]]
   pth <- scmr_split_merge_path(d$x, d$y, d$id, d$coords, G_max = G_max, alpha = 0.5, lambda = lam,
-                               control = ctrl_of(1L), seed = rep, n_split = 2L, n_merge = 2L)
+                               control = ctrl_of(1L), seed = rep, n_split = 2L, n_merge = 2L,
+                               split_rule = split_rule, scan_n = 2L)
   tot <- proc.time()[["elapsed"]] - t0
   for (G in seq_along(pth$fits)) add("path", G, pth$fits[[G]], tot / length(pth$fits))
   do.call(rbind, rows)
