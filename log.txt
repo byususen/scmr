@@ -1,0 +1,9 @@
+ Scenario Method      Criterion Correct Over   ARI
+       s3   path       PLIC_AIC    0.58 0.40 0.939
+       s3   path       PLIC_BIC    0.78 0.00 0.928
+       s3   path  PLIC_BIC_rows    0.80 0.02 0.936
+       s3   path PLIC_BIC_units    0.86 0.06 0.951
+
+Seconds per replicate (all G):
+  Scenario Method Seconds
+1       s3   path    5772
