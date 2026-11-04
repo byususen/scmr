@@ -47,47 +47,61 @@ scan_channel_stats <- function(SU, SV, d, K, ridge) {
 #   sizes: admissible region sizes; returns a data frame of candidates with a
 #   list column of members.
 scan_regime_regions <- function(sc, members, nb, sizes, anchors, beam_width = 4L,
-                                ridge = 0.01, channels = c("intercept", "slope")) {
+                                ridge = 0.01, channels = c("intercept", "slope"),
+                                keep_top = 200L) {
   inside <- logical(length(nb))
   inside[members] <- TRUE
   max_size <- max(sizes)
-  found <- list()
-  keys <- new.env(hash = TRUE, parent = emptyenv())
-  record <- function(mem, stats, origin) {
-    key <- paste(sort(mem), collapse = ",")
-    if (exists(key, envir = keys, inherits = FALSE)) return(invisible(NULL))
-    assign(key, TRUE, envir = keys)
-    found[[length(found) + 1L]] <<- list(members = sort(mem), intercept = stats[1], slope = stats[2],
-                                         origin = origin)
+  # Order-free fingerprints of a unit set (two random sums) replace string
+  # keys; a collision of both sums has probability ~ 0.
+  h1 <- stats::runif(length(nb)); h2 <- stats::runif(length(nb))
+  fp <- function(mem) sum(h1[mem]) + 1e3 * sum(h2[mem])
+  found <- list(); found_fp <- numeric(); found_st <- matrix(0, 0, 2)
+  prune <- function() {
+    # Keep the keep_top best regions of each channel.
+    keep <- unique(c(utils::head(order(-found_st[, 1]), keep_top), utils::head(order(-found_st[, 2]), keep_top)))
+    found <<- found[keep]; found_fp <<- found_fp[keep]; found_st <<- found_st[keep, , drop = FALSE]
+  }
+  record <- function(mem, stats) {
+    f <- fp(mem)
+    if (length(found_fp) && any(abs(found_fp - f) < 1e-9)) return(invisible(NULL))
+    found[[length(found) + 1L]] <<- sort(mem)
+    found_fp <<- c(found_fp, f)
+    found_st <<- rbind(found_st, stats)
+    if (length(found) > 4L * keep_top) prune()
+    invisible(NULL)
   }
   for (a in anchors) for (channel in channels) {
     beam <- list(list(mem = a, su = sc$U[a, ], sv = sc$V[a, ]))
     for (size in 2:max_size) {
-      cand_mem <- list(); cand_su <- list(); cand_sv <- list()
-      seen <- new.env(hash = TRUE, parent = emptyenv())
-      for (b in beam) {
+      cand_mem <- list(); cand_par <- integer(); cand_v <- integer(); cand_fp <- numeric()
+      for (bi in seq_along(beam)) {
+        b <- beam[[bi]]
         fr <- unique(unlist(nb[b$mem], use.names = FALSE))
         fr <- fr[inside[fr] & !(fr %in% b$mem)]
         if (!length(fr)) next
-        for (v in fr) {
-          key <- paste(sort(c(b$mem, v)), collapse = ",")
-          if (exists(key, envir = seen, inherits = FALSE)) next
-          assign(key, TRUE, envir = seen)
-          cand_mem[[length(cand_mem) + 1L]] <- c(b$mem, v)
-          cand_su[[length(cand_su) + 1L]] <- b$su + sc$U[v, ]
-          cand_sv[[length(cand_sv) + 1L]] <- b$sv + sc$V[v, ]
-        }
+        base_fp <- fp(b$mem)
+        cand_par <- c(cand_par, rep(bi, length(fr)))
+        cand_v <- c(cand_v, fr)
+        cand_fp <- c(cand_fp, base_fp + h1[fr] + 1e3 * h2[fr])
       }
-      if (!length(cand_mem)) break
-      SU <- do.call(rbind, cand_su)
-      SV <- do.call(rbind, cand_sv)
+      if (!length(cand_v)) break
+      uq <- !duplicated(round(cand_fp, 9))
+      cand_par <- cand_par[uq]; cand_v <- cand_v[uq]
+      SU <- do.call(rbind, lapply(seq_along(beam), function(bi) beam[[bi]]$su))[cand_par, , drop = FALSE] +
+        sc$U[cand_v, , drop = FALSE]
+      SV <- do.call(rbind, lapply(seq_along(beam), function(bi) beam[[bi]]$sv))[cand_par, , drop = FALSE] +
+        sc$V[cand_v, , drop = FALSE]
       st <- scan_channel_stats(SU, SV, sc$d, sc$K, ridge)
       keep <- utils::head(order(-st[, channel]), beam_width)
-      beam <- lapply(keep, function(i) list(mem = cand_mem[[i]], su = SU[i, ], sv = SV[i, ]))
-      if (size %in% sizes) for (i in keep) record(cand_mem[[i]], st[i, ], channel)
+      beam <- lapply(keep, function(i) list(mem = c(beam[[cand_par[i]]]$mem, cand_v[i]), su = SU[i, ], sv = SV[i, ]))
+      # Record the best region of this size for this anchor and channel.
+      if (size %in% sizes) record(beam[[1L]]$mem, st[keep[1L], ])
     }
   }
-  found
+  if (length(found)) prune()
+  lapply(seq_along(found), function(i) list(members = found[[i]], intercept = found_st[i, 1],
+                                            slope = found_st[i, 2]))
 }
 
 # Choose up to n regions alternating between channels, with a Jaccard limit.

@@ -81,7 +81,7 @@ run_method <- function(d, method) {
     p <- tryCatch(suppressWarnings(scmr_split_merge_path(d$x, d$y, d$block, d$coords, G_max = 2L,
       penalty = "elastic_net", alpha = .5, lambda = .02, control = d$control, seed = d$seed + 1000L,
       n_split = 1L, merge_back = FALSE, split_rule = if (method == "path_scan") "scan" else "kmeans",
-      scan_n = 5L, scan_max_size = 32L, scan_anchors = 64L, scan_beam = 4L)), error = function(e) NULL)
+      scan_n = 5L, scan_max_size = env_int("CMP_SCAN_MAX", "32"), scan_anchors = 64L, scan_beam = 4L)), error = function(e) NULL)
     if (!is.null(p) && length(p$fits) >= 2L) fits <- list(p$fits[[2L]])
     n_fits <- if (is.null(p)) 0L else sum(p$log$G == 2L)
   } else if (method == "truth") {
@@ -106,6 +106,7 @@ res <- parallel::mclapply(seq_len(nrow(jobs)), function(k) {
     message("FAILED ", m, " case ", jobs$i[k], " rep ", jobs$rep[k], ": ", conditionMessage(e)); NULL })))
 }, mc.cores = cores)
 res <- do.call(rbind, res)
+if (nzchar(Sys.getenv("CMP_LABEL"))) res$Method <- paste0(res$Method, Sys.getenv("CMP_LABEL"))
 utils::write.csv(res, out, row.names = FALSE)
 alt <- res[res$Signal != "null", ]
 print(aggregate(cbind(IoU, Exact, Components, Seconds) ~ Method, alt, mean), digits = 3)
