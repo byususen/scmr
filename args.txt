@@ -1,0 +1,1 @@
+SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=2 CMP_REP_TO=2 CMP_METHODS=path_scan CMP_SCAN_MAX=32 CMP_LABEL=32
