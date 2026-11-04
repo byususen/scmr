@@ -1,0 +1,1 @@
+SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=3 CMP_REP_TO=3

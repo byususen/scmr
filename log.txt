@@ -1,0 +1,27 @@
+        Method   IoU  Exact Components Seconds
+1      kmeans5 0.113 0.0000       1.00    8.09
+2  path_kmeans 0.158 0.0000       2.38    2.39
+3    path_scan 0.384 0.0625       1.81   46.47
+4 scan_current 0.444 0.1875       1.06   62.04
+5        truth 0.931 0.6250       1.00    1.41
+         Method    Signal     Shape    IoU
+1       kmeans5 intercept         L 0.0955
+2   path_kmeans intercept         L 0.0853
+3     path_scan intercept         L 0.2717
+4  scan_current intercept         L 0.4003
+5         truth intercept         L 0.8917
+6       kmeans5     slope         L 0.0963
+7   path_kmeans     slope         L 0.2370
+8     path_scan     slope         L 0.3877
+9  scan_current     slope         L 0.1130
+10        truth     slope         L 0.8333
+11      kmeans5 intercept rectangle 0.1422
+12  path_kmeans intercept rectangle 0.1569
+13    path_scan intercept rectangle 0.2549
+14 scan_current intercept rectangle 0.3750
+15        truth intercept rectangle 1.0000
+16      kmeans5     slope rectangle 0.1190
+17  path_kmeans     slope rectangle 0.1522
+18    path_scan     slope rectangle 0.6220
+19 scan_current     slope rectangle 0.8893
+20        truth     slope rectangle 1.0000
