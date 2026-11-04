@@ -1,0 +1,9 @@
+ Scenario Method      Criterion Correct Over   ARI
+      s4t   path       PLIC_AIC    0.32 0.06 0.802
+      s4t   path       PLIC_BIC    0.04 0.00 0.799
+      s4t   path  PLIC_BIC_rows    0.06 0.00 0.807
+      s4t   path PLIC_BIC_units    0.16 0.00 0.816
+
+Seconds per replicate (all G):
+  Scenario Method Seconds
+1      s4t   path    3752
