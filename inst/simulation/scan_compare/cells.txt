@@ -1,0 +1,11 @@
+# <cell id> <environment assignments>; run by .github/workflows/scan-compare.yaml
+grid8-r1 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=1 CMP_REP_TO=1
+grid8-r2 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=2 CMP_REP_TO=2
+grid8-r3 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=3 CMP_REP_TO=3
+grid8-r4 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=4 CMP_REP_TO=4
+grid8-r5 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=5 CMP_REP_TO=5
+grid8-r6 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=6 CMP_REP_TO=6
+grid8-r7 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=7 CMP_REP_TO=7
+grid8-r8 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=8 CMP_REP_TO=8
+grid8-r9 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=9 CMP_REP_TO=9
+grid8-r10 SCRIPT=inst/simulation/scan_compare/compare_grid8.R CMP_REP_FROM=10 CMP_REP_TO=10

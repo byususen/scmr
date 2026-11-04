@@ -81,6 +81,10 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
   feasible <- function(ug, G) length(unique(ug)) == G &&
     is_feasible_partition(ug, G, contrib$unit_total, contrib$unit_class, control$min_units, min_class)
   G_max <- as.integer(min(G_max, floor(m / control$min_units)))
+  # Spatial graph of the units, fixed for the path (the G = 1 fit carries none).
+  W0 <- build_unit_weights(get_unit_coords(data$unit_id, data$coords), control$k_neighbors,
+                           control$weight_type, control$weight_bandwidth, TRUE,
+                           control$row_standardize_weights)$W
   if (G_max < 1L) stop("G_max must allow at least one regime of min_units units.", call. = FALSE)
 
   ctrl1 <- control
@@ -135,9 +139,8 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
   # Scan-type proposals: connected high-score subregions of a regime.
   scan_proposals <- function(f, G_new) {
     ug <- unit_groups(f)
-    if (is.null(f$W)) return(list())
     sc <- scan_unit_scores(X1, Y, f$prob_train, unit_num, m)
-    e <- Matrix::summary(methods::as(f$W, "generalMatrix"))
+    e <- Matrix::summary(methods::as(W0, "generalMatrix"))
     nb <- split(e$j, factor(e$i, levels = seq_len(m)))
     single <- scan_channel_stats(sc$U, sc$V, sc$d, sc$K, scan_ridge)
     props <- list()
@@ -154,20 +157,26 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
                                rest[sample.int(length(rest), min(length(rest), scan_anchors - h))]))
       }
       found <- scan_regime_regions(sc, idx, nb, sizes, anchors, scan_beam, scan_ridge)
+      within <- 0L
       for (r in scan_select_regions(found, 3L * scan_n, scan_jaccard)) {
         lab <- ug; lab[r$members] <- G_new
         if (!feasible(lab, G_new)) next
+        within <- within + 1L
         props[[length(props) + 1L]] <- list(regime = g, rule = paste0("scan-", r$channel),
-                                            labels = lab, score = r$score)
+                                            labels = lab, score = r$score, within = within)
       }
     }
     if (!length(props)) return(props)
-    props <- props[order(-vapply(props, function(z) z$score, numeric(1)))]
-    # Keep the best proposals with at most two per regime.
+    # Channels alternate within a regime (their raw statistics are not on one
+    # scale); across regimes the proposals are interleaved by that order and
+    # then by statistic, with at most cap proposals per regime.
+    cap <- max(2L, ceiling(scan_n / (G_new - 1L)))
+    ord <- order(vapply(props, function(z) z$within, numeric(1)),
+                 -vapply(props, function(z) z$score, numeric(1)))
     keep <- integer(); per <- integer(G_new)
-    for (i in seq_along(props)) {
+    for (i in ord) {
       g <- props[[i]]$regime
-      if (per[g] >= 2L) next
+      if (per[g] >= cap) next
       keep <- c(keep, i); per[g] <- per[g] + 1L
       if (length(keep) >= scan_n) break
     }
@@ -180,7 +189,7 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
   }
   kmeans_proposals <- function(f, G_new) {
     ug <- unit_groups(f)
-    S <- smooth_scores(unit_scores(f), ug, f$W)
+    S <- smooth_scores(unit_scores(f), ug, W0)
     G_old <- G_new - 1L
     props <- list()
     for (g in seq_len(G_old)) {
@@ -214,9 +223,9 @@ scmr_split_merge_path <- function(x, y, unit_id, coords, G_max,
   merge_proposals <- function(f) {
     ug <- unit_groups(f)
     G <- f$G
-    if (G < 2L || is.null(f$W)) return(list())
+    if (G < 2L) return(list())
     H <- Matrix::sparseMatrix(i = seq_len(m), j = ug, x = 1, dims = c(m, G))
-    A <- as.matrix(Matrix::t(H) %*% f$W %*% H)
+    A <- as.matrix(Matrix::t(H) %*% W0 %*% H)
     lev <- levels(data$y)
     own <- vapply(seq_len(G), function(g) sum(true_class_logp(f$prob_train[f$row_group == g, , drop = FALSE],
                                                               data$y[f$row_group == g], lev)), numeric(1))

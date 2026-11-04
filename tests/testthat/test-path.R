@@ -97,3 +97,28 @@ test_that("shared-base regimes add the base offset everywhere it is needed", {
   # The monotone alternation is unchanged: the base is a fixed offset.
   expect_true(all(diff(f$obj_trace$PenalizedObjective) >= -1e-6))
 })
+
+test_that("scan split proposals are connected regions inside one regime", {
+  d <- sim_block_regimes()
+  p <- scmr_split_merge_path(d$x, d$y, d$id, d$coords, G_max = 3, alpha = 0.5, lambda = 0.01,
+                             control = path_control(), seed = 7, split_rule = "scan", scan_n = 2L,
+                             scan_max_size = 20L, scan_anchors = 30L, merge_back = FALSE)
+  expect_true(any(grepl("^regime [0-9]+ \\(scan-", p$log$Detail)))
+  expect_true(all(is.finite(p$table$Objective)))
+  # The region search itself returns connected sets.
+  units <- sort(unique(d$id))
+  W <- scmr:::build_unit_weights(scmr:::get_unit_coords(d$id, d$coords), 8, "binary", NULL, TRUE, FALSE)$W
+  e <- Matrix::summary(methods::as(W, "generalMatrix"))
+  nb <- split(e$j, factor(e$i, levels = seq_along(units)))
+  f1 <- p$fits[[1]]
+  Y <- model.matrix(~ d$y - 1)
+  sc <- scmr:::scan_unit_scores(cbind(1, scale(d$x)), Y, f1$prob_train, match(d$id, units), length(units))
+  found <- scmr:::scan_regime_regions(sc, seq_along(units), nb, 5:10, anchors = 1:10)
+  connected <- function(mem) {
+    reach <- mem[1]
+    repeat { add <- setdiff(intersect(unlist(nb[reach]), mem), reach); if (!length(add)) break; reach <- c(reach, add) }
+    length(reach) == length(mem)
+  }
+  expect_true(length(found) > 0)
+  expect_true(all(vapply(found, function(z) connected(z$members), logical(1))))
+})
