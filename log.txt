@@ -1,0 +1,7 @@
+       Method   IoU Exact Components Seconds
+1 path_scan32 0.308     0       1.88    10.5
+       Method    Signal     Shape   IoU
+1 path_scan32 intercept         L 0.120
+2 path_scan32     slope         L 0.375
+3 path_scan32 intercept rectangle 0.300
+4 path_scan32     slope rectangle 0.435
