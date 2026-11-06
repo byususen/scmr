@@ -6,7 +6,10 @@
 # the noise bulk, calibrated by a parametric bootstrap from the fitted
 # probabilities (statistic R_k = lambda_k / median(lambda), invariant to a common
 # inflation of the score variance). A regime with no spike is "stable": it shows
-# no sign of a hidden sub-regime. No refitting; only aggregates are written.
+# no sign of a hidden sub-regime. Each spike is also checked for spatial order
+# (Moran's I of its segment loadings, permutation test): a hidden sub-regime is
+# spatially coherent, unstructured segment effects are not. No refitting; only
+# aggregates are written.
 #
 # Run in RStudio (about 10-20 minutes):
 #   source("C:/Users/bayus/OneDrive/S3/Disertasi/Article 3/Bahan/Syntax/SCMR_EN_spectrum_ksa.R")
@@ -32,6 +35,14 @@ x <- X_base[, global$x_colnames, drop = FALSE]
 y <- dat$phase
 units <- sort(unique(seg_id))
 unit_num <- match(seg_id, units)
+uxy <- as.matrix(seg_xy)[match(units, seg_id), , drop = FALSE]
+# Symmetric 8-nearest-neighbour adjacency of the segments.
+knn_adj <- function(xy, k = 8L) {
+  D <- as.matrix(stats::dist(xy)); diag(D) <- Inf
+  A <- matrix(0, nrow(xy), nrow(xy))
+  for (i in seq_len(nrow(xy))) A[i, order(D[i, ])[seq_len(min(k, nrow(xy) - 1L))]] <- 1
+  pmax(A, t(A))
+}
 
 reg_rows <- list(); eig_rows <- list()
 for (G in G_list) {
@@ -45,14 +56,21 @@ for (G in G_list) {
     if (m_g < 5L) next
     t0 <- proc.time()[["elapsed"]]
     sb <- spectrum_boot(x, y, f$prob_train, unit_num, rows_g, B = n_boot, seed = 100L * G + g)
+    si <- unit_scores_info(x, y, f$prob_train, unit_num, rows_g)
+    g_units <- sort(unique(unit_num[rows_g]))
+    mo <- spike_moran(si$U, si$n_b, si$J, knn_adj(uxy[g_units, , drop = FALSE]), k = 5L, n_perm = 499L,
+                      seed = 100L * G + g)
+    ordered <- sum(seq_len(nrow(mo)) <= sb$spikes & mo$p < 0.05)
     reg_rows[[length(reg_rows) + 1L]] <- data.frame(G = G, Regime = g, Segments = m_g, Rows = length(rows_g),
       d = sb$d, R1 = sb$R[1], R2 = sb$R[2], R3 = sb$R[3], Rcrit95 = sb$crit,
       Rcrit99 = stats::quantile(sb$boot, 0.99, names = FALSE), Spikes = sb$spikes,
+      Moran1 = mo$MoranI[1], MoranP1 = mo$p[1], Moran2 = mo$MoranI[2], MoranP2 = mo$p[2],
+      Moran3 = mo$MoranI[3], MoranP3 = mo$p[3], OrderedSpikes = ordered,
       Seconds = round(proc.time()[["elapsed"]] - t0, 1))
     eig_rows[[length(eig_rows) + 1L]] <- data.frame(G = G, Regime = g, k = seq_len(min(20L, length(sb$R))),
                                                     R = sb$R[seq_len(min(20L, length(sb$R)))])
-    cat(sprintf("  G = %2d regime %2d: %3d segments, R1 = %.2f (crit %.2f), spikes %d\n",
-                G, g, m_g, sb$R[1], sb$crit, sb$spikes))
+    cat(sprintf("  G = %2d regime %2d: %3d segments, R1 = %.2f (crit %.2f), spikes %d, spatially ordered %d\n",
+                G, g, m_g, sb$R[1], sb$crit, sb$spikes, ordered))
   }
   rm(f); invisible(gc())
 }
@@ -60,5 +78,5 @@ reg <- do.call(rbind, reg_rows)
 utils::write.csv(reg, file.path(int_dir, "spectrum_regimes.csv"), row.names = FALSE)
 utils::write.csv(do.call(rbind, eig_rows), file.path(int_dir, "spectrum_eigen.csv"), row.names = FALSE)
 cat("\nRegimes with at least one spike, by G:\n")
-print(aggregate(cbind(Unstable = Spikes > 0, Regimes = 1) ~ G, reg, sum))
+print(aggregate(cbind(SpikeRegimes = Spikes > 0, OrderedSpikeRegimes = OrderedSpikes > 0, Regimes = 1) ~ G, reg, sum))
 cat("SPECTRUM DONE\n")
