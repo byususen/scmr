@@ -1,0 +1,142 @@
+# Score-spectrum (phase-transition) diagnostics for SCMR regimes.
+#
+# For a fitted regime with units b = 1..m, let u_b be the unit score vector
+# (sum over the unit's rows of (e_y - p) (x) (1, x), classes 1..C-1) and J-bar
+# the average per-row Fisher information times the mean unit size. Under a
+# homogeneous regime the whitened scores w_b = (nbar / n_b)^{1/2} Jbar^{-1/2} u_b
+# are approximately mean-zero with covariance sigma^2 I_d (sigma^2 = 1 for a
+# correct model; > 1 under within-unit dependence or overdispersion), so the
+# eigenvalues of S = (1/m) sum_b w_b w_b' follow the Marchenko-Pastur law with
+# ratio gamma = d / m and upper edge sigma^2 (1 + sqrt(gamma))^2. A hidden
+# sub-regime adds a spike; by the BBP phase transition it separates from the
+# bulk only when its strength exceeds sigma^2 sqrt(gamma).
+
+mp_quantile <- function(prob, gamma, sigma2 = 1, grid = 4000L) {
+  a <- sigma2 * (1 - sqrt(gamma))^2; b <- sigma2 * (1 + sqrt(gamma))^2
+  x <- seq(a, b, length.out = grid + 2L)[-c(1L, grid + 2L)]
+  dens <- sqrt(pmax((b - x) * (x - a), 0)) / (2 * pi * gamma * sigma2 * x)
+  cdf <- cumsum(dens); cdf <- cdf / cdf[length(cdf)]
+  stats::approx(cdf, x, xout = prob, ties = "ordered", rule = 2)$y
+}
+
+# Tracy-Widom (beta = 1) upper quantile of the largest eigenvalue (Johnstone 2001).
+tw_crit <- function(m, d, sigma2, level = 0.95) {
+  q <- c(`0.9` = 0.4501, `0.95` = 0.9793, `0.99` = 2.0234)[as.character(level)]
+  mu <- (sqrt(m - 1) + sqrt(d))^2
+  s <- (sqrt(m - 1) + sqrt(d)) * (1 / sqrt(m - 1) + 1 / sqrt(d))^(1 / 3)
+  sigma2 * (mu + s * q) / m
+}
+
+# Unit scores and pooled Fisher information for rows `rows_g` of a fit.
+unit_scores_info <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x))) {
+  Z <- cbind(1, scale(x))
+  Z[!is.finite(Z)] <- 0
+  Z <- Z[rows_g, , drop = FALSE]
+  P <- prob[rows_g, , drop = FALSE]
+  C <- ncol(P); K <- C - 1L; p1 <- ncol(Z)
+  Y <- matrix(0, length(rows_g), C); Y[cbind(seq_along(rows_g), as.integer(y[rows_g]))] <- 1
+  u_rows <- do.call(cbind, lapply(seq_len(K), function(c) Z * (Y[, c] - P[, c])))
+  un <- factor(unit_num[rows_g])
+  U <- rowsum(u_rows, un, reorder = TRUE)
+  n_b <- as.numeric(table(un))
+  J <- matrix(0, K * p1, K * p1)
+  for (c1 in seq_len(K)) for (c2 in c1:K) {
+    w <- if (c1 == c2) P[, c1] * (1 - P[, c1]) else -P[, c1] * P[, c2]
+    blk <- crossprod(Z * w, Z)
+    J[(c1 - 1) * p1 + seq_len(p1), (c2 - 1) * p1 + seq_len(p1)] <- blk
+    J[(c2 - 1) * p1 + seq_len(p1), (c1 - 1) * p1 + seq_len(p1)] <- t(blk)
+  }
+  list(U = U, n_b = n_b, J = J / length(rows_g))     # J per row
+}
+
+# Spectrum of whitened unit scores and the number of spikes above the edge.
+#   ridge: relative ridge on the information before whitening
+#   proj: if not NULL, number of leading information-weighted directions kept
+score_spectrum <- function(si, ridge = 1e-3, level = 0.95, max_spikes = 10L) {
+  m <- nrow(si$U); d <- ncol(si$U)
+  nbar <- mean(si$n_b)
+  Jb <- si$J * nbar
+  ev <- eigen(Jb, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (si$U * sqrt(nbar / si$n_b)) %*% Wh
+  d <- ncol(W)
+  lam <- if (d <= m) eigen(crossprod(W) / m, symmetric = TRUE, only.values = TRUE)$values else
+    eigen(tcrossprod(W) / m, symmetric = TRUE, only.values = TRUE)$values
+  gamma <- d / m
+  # Noise level from the bulk, re-estimated after removing detected spikes.
+  k <- 0L
+  repeat {
+    bulk <- lam[(k + 1L):length(lam)]
+    if (gamma > 1) bulk <- bulk[seq_len(max(1L, min(m, d) - k))]
+    sigma2 <- stats::median(bulk) / mp_quantile(0.5, gamma)
+    crit <- tw_crit(m, d, sigma2, level)
+    k_new <- sum(lam[seq_len(min(max_spikes, length(lam)))] > crit)
+    if (k_new == k) break
+    k <- k_new
+    if (k >= max_spikes) break
+  }
+  list(lambda = lam, m = m, d = d, gamma = gamma, sigma2 = sigma2, crit = crit,
+       edge = sigma2 * (1 + sqrt(gamma))^2, spikes = k, ratio1 = lam[1] / crit)
+}
+
+# Scale-free version calibrated by a parametric bootstrap from the fitted
+# probabilities: R_k = lambda_k / median(lambda). A common inflation of the
+# score variance (within-unit dependence, overdispersion) cancels in R; the
+# bootstrap supplies the finite-sample shape (unequal unit sizes, rank of the
+# unit information, d / m) that the asymptotic Marchenko-Pastur law misses.
+whitened_eigen <- function(U, n_b, J, ridge = 1e-3) {
+  m <- nrow(U); nbar <- mean(n_b)
+  ev <- eigen(J * nbar, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (U * sqrt(nbar / n_b)) %*% Wh
+  lam <- if (ncol(W) <= m) eigen(crossprod(W) / m, symmetric = TRUE, only.values = TRUE)$values else
+    eigen(tcrossprod(W) / m, symmetric = TRUE, only.values = TRUE)$values
+  lam[seq_len(min(m - 1L, ncol(W)))]          # drop the centring zero
+}
+spectrum_boot <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x)), B = 200L, level = 0.95,
+                          max_spikes = 10L, seed = 1L) {
+  si <- unit_scores_info(x, y, prob, unit_num, rows_g)
+  lam <- whitened_eigen(si$U, si$n_b, si$J)
+  R <- lam / stats::median(lam)
+  P <- prob[rows_g, , drop = FALSE]
+  cum <- t(apply(P, 1, cumsum))
+  set.seed(seed)
+  lev <- levels(y)
+  Rb <- replicate(B, {
+    ys <- factor(lev[1 + rowSums(stats::runif(nrow(P)) > cum)], levels = lev)
+    yy <- y; yy[rows_g] <- ys
+    sb <- unit_scores_info(x, yy, prob, unit_num, rows_g)
+    lb <- whitened_eigen(sb$U, sb$n_b, si$J)
+    lb[1] / stats::median(lb)
+  })
+  crit <- stats::quantile(Rb, level, names = FALSE)
+  list(R = R, crit = crit, spikes = sum(R[seq_len(min(max_spikes, length(R)))] > crit),
+       m = nrow(si$U), d = ncol(si$U), boot = Rb)
+}
+
+# Spatial order of the leading directions. A sub-regime is a spatially coherent
+# set of units, so the unit loadings of its spike are spatially autocorrelated
+# ("ordered phase"); unstructured unit effects (e.g. segment random effects)
+# also inflate eigenvalues but give loadings without spatial order. Moran's I of
+# the loadings of the top k eigenvectors, with a permutation p-value.
+#   A: m x m symmetric adjacency of the regime's units (same order as U rows)
+spike_moran <- function(U, n_b, J, A, k = 3L, n_perm = 499L, ridge = 1e-3, seed = 1L) {
+  m <- nrow(U); nbar <- mean(n_b)
+  ev <- eigen(J * nbar, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (U * sqrt(nbar / n_b)) %*% Wh
+  e <- eigen(tcrossprod(W) / m, symmetric = TRUE)
+  L <- e$vectors[, seq_len(min(k, m - 1L)), drop = FALSE]
+  A <- as.matrix(A); diag(A) <- 0; S0 <- sum(A)
+  moran <- function(z) { z <- z - mean(z); (m / S0) * sum(z * (A %*% z)) / sum(z^2) }
+  set.seed(seed)
+  out <- t(apply(L, 2, function(z) {
+    I <- moran(z)
+    perm <- replicate(n_perm, moran(sample(z)))
+    c(I = I, p = (1 + sum(perm >= I)) / (n_perm + 1))
+  }))
+  data.frame(k = seq_len(nrow(out)), MoranI = out[, "I"], p = out[, "p"])
+}
