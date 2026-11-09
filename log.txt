@@ -1,0 +1,9 @@
+
+n_b = 30, tau = 0, p = 20: G = 1 fit, phase of the single regime
+        Phase
+Scenario continuous discrete
+     s4t         19       31
+Regimes of the true partition (target: none discrete)
+        Phase
+Scenario continuous homogeneous
+     s4t          1         199
