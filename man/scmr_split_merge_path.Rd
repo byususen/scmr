@@ -23,7 +23,14 @@ scmr_split_merge_path(
   standard_starts = FALSE,
   init_features = NULL,
   keep_fits = TRUE,
-  verbose = FALSE
+  verbose = FALSE,
+  split_rule = c("kmeans", "scan", "both"),
+  scan_n = 2L,
+  scan_max_size = 60L,
+  scan_anchors = 100L,
+  scan_beam = 4L,
+  scan_ridge = 0.01,
+  scan_jaccard = 0.6
 )
 }
 \arguments{
@@ -67,6 +74,24 @@ at every G and keep it when its objective is larger.}
 \item{keep_fits}{If \code{FALSE}, keep only memberships and criteria per G.}
 
 \item{verbose}{Print progress.}
+
+\item{split_rule}{How split proposals are formed: \code{"kmeans"} (2-means of
+the smoothed, projected block score vectors), \code{"scan"} (connected
+subregions of a regime grown by beam search on the spatial graph and ranked
+by intercept and slope score statistics), or \code{"both"}.}
+
+\item{scan_n}{Number of scan proposals fitted per G.}
+
+\item{scan_max_size}{Largest scan region (units).}
+
+\item{scan_anchors}{Maximum number of anchor units per regime (half chosen by
+their single-unit statistic, half at random).}
+
+\item{scan_beam}{Beam width per anchor and channel.}
+
+\item{scan_ridge}{Ridge added to the information in the score statistics.}
+
+\item{scan_jaccard}{Maximum Jaccard overlap between selected scan regions.}
 }
 \value{
 An object of class \code{scmr_path}: \code{fits} (list by G), \code{table} (one row
