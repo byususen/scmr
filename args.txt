@@ -1,0 +1,1 @@
+SCRIPT=inst/simulation/spectrum/sim_phase_final.R SPEC_SCEN=grad SPEC_NB=30 SPEC_TAU=0 SPEC_P=20 SPEC_REPS=50
