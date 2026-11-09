@@ -28,9 +28,18 @@ tw_crit <- function(m, d, sigma2, level = 0.95) {
 }
 
 # Unit scores and pooled Fisher information for rows `rows_g` of a fit.
-unit_scores_info <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x))) {
-  Z <- cbind(1, scale(x))
-  Z[!is.finite(Z)] <- 0
+# Optional reduction of the score dimension: with q_proj > 0 the standardized
+# predictors are replaced by their first q_proj principal components (computed on
+# all rows), so d = (C - 1) (q_proj + 1). A smaller d / m keeps the spike
+# eigenvectors close to the signal direction (the eigenvector overlap in the
+# spiked model falls as d / m grows), which the loading tests need.
+unit_scores_info <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x)), q_proj = 0L) {
+  Xs <- scale(x); Xs[!is.finite(Xs)] <- 0
+  if (q_proj > 0L && q_proj < ncol(Xs)) {
+    pcs <- .scmr_pc_cache(Xs, q_proj)
+    Xs <- Xs %*% pcs
+  }
+  Z <- cbind(1, Xs)
   Z <- Z[rows_g, , drop = FALSE]
   P <- prob[rows_g, , drop = FALSE]
   C <- ncol(P); K <- C - 1L; p1 <- ncol(Z)
@@ -47,6 +56,17 @@ unit_scores_info <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x))) {
     J[(c2 - 1) * p1 + seq_len(p1), (c1 - 1) * p1 + seq_len(p1)] <- t(blk)
   }
   list(U = U, n_b = n_b, J = J / length(rows_g))     # J per row
+}
+
+.scmr_pc_env <- new.env()
+.scmr_pc_cache <- function(Xs, q) {
+  key <- paste(nrow(Xs), ncol(Xs), q, sum(Xs[seq_len(min(50L, nrow(Xs))), 1]))
+  if (!identical(.scmr_pc_env$key, key)) {
+    sv <- if (nrow(Xs) > 20000L) svd(Xs[sort(sample.int(nrow(Xs), 20000L)), ], nu = 0, nv = q) else svd(Xs, nu = 0, nv = q)
+    assign("rot", sv$v[, seq_len(q), drop = FALSE], envir = .scmr_pc_env)
+    assign("key", key, envir = .scmr_pc_env)
+  }
+  .scmr_pc_env$rot
 }
 
 # Spectrum of whitened unit scores and the number of spikes above the edge.
@@ -96,8 +116,8 @@ whitened_eigen <- function(U, n_b, J, ridge = 1e-3) {
   lam[seq_len(min(m - 1L, ncol(W)))]          # drop the centring zero
 }
 spectrum_boot <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x)), B = 200L, level = 0.95,
-                          max_spikes = 10L, seed = 1L) {
-  si <- unit_scores_info(x, y, prob, unit_num, rows_g)
+                          max_spikes = 10L, seed = 1L, q_proj = 0L) {
+  si <- unit_scores_info(x, y, prob, unit_num, rows_g, q_proj)
   lam <- whitened_eigen(si$U, si$n_b, si$J)
   R <- lam / stats::median(lam)
   P <- prob[rows_g, , drop = FALSE]
@@ -107,7 +127,7 @@ spectrum_boot <- function(x, y, prob, unit_num, rows_g = seq_len(nrow(x)), B = 2
   Rb <- replicate(B, {
     ys <- factor(lev[1 + rowSums(stats::runif(nrow(P)) > cum)], levels = lev)
     yy <- y; yy[rows_g] <- ys
-    sb <- unit_scores_info(x, yy, prob, unit_num, rows_g)
+    sb <- unit_scores_info(x, yy, prob, unit_num, rows_g, q_proj)
     lb <- whitened_eigen(sb$U, sb$n_b, si$J)
     lb[1] / stats::median(lb)
   })

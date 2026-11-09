@@ -13,6 +13,7 @@ cores <- env_num("SPEC_CORES", "2"); lam <- env_num("SPEC_LAMBDA", "0.005")
 scens <- strsplit(Sys.getenv("SPEC_SCEN", "null,s3,s4,s4t"), ",")[[1]]
 out <- Sys.getenv("SPEC_OUT", "spectrum.csv")
 nboot <- env_num("SPEC_BOOT", "200")
+qproj <- env_num("SPEC_PROJ", "0")
 nperm <- env_num("SPEC_PERM", "999"); nnull <- env_num("SPEC_NULL", "499"); ncount <- env_num("SPEC_COUNT_NULL", "199")
 K <- 4L; cls <- letters[1:K]
 
@@ -82,10 +83,10 @@ one <- function(job) {
   truth <- d$reg[match(units, sprintf("B%04d", seq_len(side^2)))]
   f1 <- suppressWarnings(fit_scmr(d$x, d$y, model = "scmr", G = 1L, unit_id = d$id, coords = d$coords,
                                   alpha = 0.5, lambda = lam, control = ctrl, seed = job$rep))
-  sp1 <- score_spectrum(unit_scores_info(d$x, d$y, f1$prob_train, unit_num))
-  bt1 <- spectrum_boot(d$x, d$y, f1$prob_train, unit_num, B = nboot, seed = job$rep)
+  sp1 <- score_spectrum(unit_scores_info(d$x, d$y, f1$prob_train, unit_num, q_proj = qproj))
+  bt1 <- spectrum_boot(d$x, d$y, f1$prob_train, unit_num, B = nboot, seed = job$rep, q_proj = qproj)
   uxy <- d$coords[match(units, d$id), , drop = FALSE]
-  si1 <- unit_scores_info(d$x, d$y, f1$prob_train, unit_num)
+  si1 <- unit_scores_info(d$x, d$y, f1$prob_train, unit_num, q_proj = qproj)
   mo1 <- spike_moran(si1$U, si1$n_b, si1$J, adjacency(uxy), n_perm = 199L, seed = job$rep)
   ph1 <- phase_order_test(si1$U, si1$n_b, si1$J, adjacency(uxy), bt1$spikes, n_perm = nperm, n_null = nnull, seed = job$rep)
   pc1 <- phase_count_test(si1$U, si1$n_b, si1$J, adjacency(uxy), bt1$spikes, n_perm = nperm, n_null = ncount, seed = job$rep)
@@ -104,9 +105,9 @@ one <- function(job) {
     for (g in seq_len(d$G)) {
       ug_rows <- which(ug[unit_num] == g)
       if (length(unique(unit_num[ug_rows])) < 5L) next
-      sp <- score_spectrum(unit_scores_info(d$x, d$y, ft$prob_train, unit_num, ug_rows))
-      bt <- spectrum_boot(d$x, d$y, ft$prob_train, unit_num, ug_rows, B = nboot, seed = job$rep + g)
-      sig <- unit_scores_info(d$x, d$y, ft$prob_train, unit_num, ug_rows)
+      sp <- score_spectrum(unit_scores_info(d$x, d$y, ft$prob_train, unit_num, ug_rows, q_proj = qproj))
+      bt <- spectrum_boot(d$x, d$y, ft$prob_train, unit_num, ug_rows, B = nboot, seed = job$rep + g, q_proj = qproj)
+      sig <- unit_scores_info(d$x, d$y, ft$prob_train, unit_num, ug_rows, q_proj = qproj)
       ug_units <- sort(unique(unit_num[ug_rows]))
       mo <- spike_moran(sig$U, sig$n_b, sig$J, adjacency(uxy[ug_units, , drop = FALSE]), n_perm = 199L, seed = job$rep + g)
       ph <- phase_order_test(sig$U, sig$n_b, sig$J, adjacency(uxy[ug_units, , drop = FALSE]), bt$spikes,
