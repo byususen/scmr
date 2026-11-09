@@ -13,6 +13,7 @@ cores <- env_num("SPEC_CORES", "2"); lam <- env_num("SPEC_LAMBDA", "0.005")
 scens <- strsplit(Sys.getenv("SPEC_SCEN", "null,s3,s4,s4t"), ",")[[1]]
 out <- Sys.getenv("SPEC_OUT", "spectrum.csv")
 nboot <- env_num("SPEC_BOOT", "200")
+nperm <- env_num("SPEC_PERM", "999"); nnull <- env_num("SPEC_NULL", "499")
 K <- 4L; cls <- letters[1:K]
 
 make_regimes <- function(shares, seed) {
@@ -35,7 +36,9 @@ make_regimes <- function(shares, seed) {
   lab[lab == 0L] <- 1L; lab
 }
 make_data <- function(scen, seed) {
-  shares <- switch(scen, null = 1, s3 = c(.60, .30, .10), s4 = c(.55, .30, .10, .05), s4t = c(.60, .28, .10, .02))
+  smooth <- scen %in% c("grad", "wave")
+  shares <- switch(scen, null = 1, grad = 1, wave = 1, s3 = c(.60, .30, .10), s4 = c(.55, .30, .10, .05),
+                   s4t = c(.60, .28, .10, .02))
   reg <- make_regimes(shares, seed); set.seed(seed + 1L)
   G <- length(shares); B <- side^2
   base <- matrix(0, K, p + 1); base[-1, 2:7] <- matrix(stats::rnorm((K - 1) * 6, 0, 0.8), K - 1)
@@ -50,6 +53,16 @@ make_data <- function(scen, seed) {
   re <- matrix(stats::rnorm(B * K, 0, tau), B, K); re[, 1] <- 0     # within-block dependence
   eta <- matrix(0, nrow(x), K)
   for (g in seq_len(G)) { i <- which(r == g); eta[i, ] <- cbind(1, x[i, ]) %*% t(betas[[g]]) }
+  if (smooth) {
+    # Continuous spatial variation, no discrete regimes: beta(s) = base + f(s) D.
+    gx0 <- rep(seq_len(side), side); gy0 <- rep(seq_len(side), each = side)
+    f <- if (scen == "grad") (gx0 + gy0 - side - 1) / (side - 1) else
+      sin(pi * gx0 / side * 2) * cos(pi * gy0 / side * 2)
+    D <- matrix(0, K, p + 1); kk <- sample(2:K, 2); jj <- sample(2:7, 3)
+    D[kk, jj] <- delta * matrix(sample(c(-1, 1), 6, TRUE), 2); D[kk, 1] <- delta * sample(c(-1, 1), 2, TRUE)
+    fr <- f[rep(seq_len(B), each = n_b)]
+    eta <- eta + fr * (cbind(1, x) %*% t(D))
+  }
   eta <- eta + re[rep(seq_len(B), each = n_b), ]
   pr <- exp(eta - apply(eta, 1, max)); pr <- pr / rowSums(pr)
   u <- stats::runif(nrow(pr)); y <- factor(cls[1 + rowSums(u > t(apply(pr, 1, cumsum)))], levels = cls)
@@ -64,7 +77,7 @@ adjacency <- function(units_xy) {
   D <- as.matrix(stats::dist(units_xy)); A <- (D > 0 & D <= 1.5) * 1; A
 }
 one <- function(job) {
-  d <- make_data(job$scen, 1000L * job$rep + match(job$scen, c("null", "s3", "s4", "s4t")))
+  d <- make_data(job$scen, 1000L * job$rep + match(job$scen, c("null", "s3", "s4", "s4t", "grad", "wave")))
   units <- sort(unique(d$id)); unit_num <- match(d$id, units)
   truth <- d$reg[match(units, sprintf("B%04d", seq_len(side^2)))]
   f1 <- suppressWarnings(fit_scmr(d$x, d$y, model = "scmr", G = 1L, unit_id = d$id, coords = d$coords,
@@ -74,11 +87,14 @@ one <- function(job) {
   uxy <- d$coords[match(units, d$id), , drop = FALSE]
   si1 <- unit_scores_info(d$x, d$y, f1$prob_train, unit_num)
   mo1 <- spike_moran(si1$U, si1$n_b, si1$J, adjacency(uxy), n_perm = 199L, seed = job$rep)
+  ph1 <- phase_order_test(si1$U, si1$n_b, si1$J, adjacency(uxy), bt1$spikes, n_perm = nperm, n_null = nnull, seed = job$rep)
   rows <- data.frame(Scenario = job$scen, Rep = job$rep, TrueG = d$G, Fit = "G1", Regime = 1L,
     Units = length(units), Pure = d$G == 1L, d = sp1$d, gamma = sp1$gamma, sigma2 = sp1$sigma2,
     lambda1 = sp1$lambda[1], lambda2 = sp1$lambda[2], lambda3 = sp1$lambda[3], crit = sp1$crit, Spikes = sp1$spikes,
     R1 = bt1$R[1], Rcrit = bt1$crit, SpikesBoot = bt1$spikes,
-    Moran1 = mo1$MoranI[1], MoranP1 = mo1$p[1], Moran2 = mo1$MoranI[2], MoranP2 = mo1$p[2])
+    Moran1 = mo1$MoranI[1], MoranP1 = mo1$p[1], Moran2 = mo1$MoranI[2], MoranP2 = mo1$p[2],
+    PhaseP = regime_phase_p(ph1), PhaseSpikes = sum(ph1$p < 0.05), PhaseOrderOnly = sum(ph1$p_order < 0.05),
+    BC1 = if (nrow(ph1)) ph1$BC[1] else NA_real_)
   if (d$G > 1L) {
     ft <- suppressWarnings(fit_scmr(d$x, d$y, model = "scmr", G = d$G, unit_id = d$id, coords = d$coords,
                                     alpha = 0.5, lambda = lam, control = ctrl, seed = job$rep, initial_cluster = truth))
@@ -91,12 +107,16 @@ one <- function(job) {
       sig <- unit_scores_info(d$x, d$y, ft$prob_train, unit_num, ug_rows)
       ug_units <- sort(unique(unit_num[ug_rows]))
       mo <- spike_moran(sig$U, sig$n_b, sig$J, adjacency(uxy[ug_units, , drop = FALSE]), n_perm = 199L, seed = job$rep + g)
+      ph <- phase_order_test(sig$U, sig$n_b, sig$J, adjacency(uxy[ug_units, , drop = FALSE]), bt$spikes,
+                             n_perm = nperm, n_null = nnull, seed = job$rep + g)
       pure <- mean(truth[ug == g] == as.integer(names(which.max(table(truth[ug == g])))))
       rows <- rbind(rows, data.frame(Scenario = job$scen, Rep = job$rep, TrueG = d$G, Fit = "truthstart", Regime = g,
         Units = sp$m, Pure = pure, d = sp$d, gamma = sp$gamma, sigma2 = sp$sigma2, lambda1 = sp$lambda[1],
         lambda2 = sp$lambda[2], lambda3 = sp$lambda[3], crit = sp$crit, Spikes = sp$spikes,
         R1 = bt$R[1], Rcrit = bt$crit, SpikesBoot = bt$spikes,
-        Moran1 = mo$MoranI[1], MoranP1 = mo$p[1], Moran2 = mo$MoranI[2], MoranP2 = mo$p[2]))
+        Moran1 = mo$MoranI[1], MoranP1 = mo$p[1], Moran2 = mo$MoranI[2], MoranP2 = mo$p[2],
+        PhaseP = regime_phase_p(ph), PhaseSpikes = sum(ph$p < 0.05), PhaseOrderOnly = sum(ph$p_order < 0.05),
+        BC1 = if (nrow(ph)) ph$BC[1] else NA_real_))
     }
   }
   rows$NB <- n_b; rows$Tau <- tau; rows
@@ -115,3 +135,10 @@ ts <- res[res$Fit == "truthstart", ]
 if (nrow(ts)) { cat("\nTruth-start regimes: spikes (target 0)\n"); print(table(Scenario = ts$Scenario, Spikes = ts$Spikes))
   cat("Bootstrap-calibrated:\n"); print(table(Scenario = ts$Scenario, SpikesBoot = ts$SpikesBoot))
   cat("Spike AND spatially ordered:\n"); print(table(Scenario = ts$Scenario, Split = ts$SpikesBoot > 0 & ts$MoranP1 < 0.05)) }
+
+cat("\nPhase rule (spike AND ordered AND two coexisting phases), G = 1 fit: regimes split at 5%\n")
+print(table(Scenario = g1$Scenario, Split = g1$PhaseP < 0.05))
+cat("Order only (spike AND Moran), G = 1:\n"); print(table(Scenario = g1$Scenario, OrderOnly = g1$PhaseOrderOnly > 0))
+print(aggregate(BC1 ~ Scenario, g1, mean), digits = 3)
+if (nrow(ts)) { cat("Truth-start regimes split by the phase rule (target 0):\n")
+  print(table(Scenario = ts$Scenario, Split = ts$PhaseP < 0.05)) }

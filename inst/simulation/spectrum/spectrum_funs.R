@@ -140,3 +140,67 @@ spike_moran <- function(U, n_b, J, A, k = 3L, n_perm = 499L, ridge = 1e-3, seed 
   }))
   data.frame(k = seq_len(nrow(out)), MoranI = out[, "I"], p = out[, "p"])
 }
+
+# ---------------------------------------------------------------------------
+# Phase-coexistence test (first-order versus continuous transition).
+# A discrete sub-regime makes the unit loadings of its spike two-valued plus
+# noise ("two coexisting phases"); a smooth spatial gradient gives spatially
+# ordered but unimodal loadings. For each spike eigenvector we test
+#   (a) spatial order: Moran's I of the loadings, permutation p-value;
+#   (b) coexistence: Sarle's bimodality coefficient of the loadings, against a
+#       null of a *continuous* spatially autocorrelated field (Gaussian SAR
+#       field on the same graph with the same Moran's I), so spatial order
+#       alone does not count as a discrete phase.
+# The spike is a discrete sub-regime only if both reject (intersection-union:
+# p = max(p_a, p_b)). Within a regime the spike p-values are Bonferroni
+# adjusted; across the regimes of one G they are Holm adjusted.
+bimodality_coef <- function(z) {
+  n <- length(z); z <- z - mean(z); s2 <- mean(z^2)
+  g <- mean(z^3) / s2^1.5; k <- mean(z^4) / s2^2 - 3
+  (g^2 + 1) / (k + 3 * (n - 1)^2 / ((n - 2) * (n - 3)))
+}
+moran_I <- function(Z, A) {          # Z: m x B matrix of (centred) columns
+  Z <- sweep(Z, 2, colMeans(Z))
+  (nrow(Z) / sum(A)) * colSums(Z * (A %*% Z)) / colSums(Z^2)
+}
+sar_fields <- function(A, rho, B, seed) {
+  Wr <- A / pmax(rowSums(A), 1)
+  M <- diag(nrow(A)) - rho * Wr
+  set.seed(seed)
+  solve(M, matrix(stats::rnorm(nrow(A) * B), nrow(A)))
+}
+phase_order_test <- function(U, n_b, J, A, n_spikes, k = 5L, n_perm = 9999L, n_null = 999L,
+                             ridge = 1e-3, seed = 1L) {
+  m <- nrow(U); nbar <- mean(n_b)
+  A <- as.matrix(A); diag(A) <- 0
+  ev <- eigen(J * nbar, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (U * sqrt(nbar / n_b)) %*% Wh
+  e <- eigen(tcrossprod(W) / m, symmetric = TRUE)
+  kk <- min(k, max(n_spikes, 0L), m - 1L)
+  if (kk < 1L) return(data.frame(k = integer(), MoranI = numeric(), p_order = numeric(),
+                                 BC = numeric(), p_coexist = numeric(), p = numeric()))
+  # Null fields: a grid of SAR strengths, matched later on Moran's I.
+  rhos <- c(0, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95)
+  fields <- lapply(seq_along(rhos), function(i) sar_fields(A, rhos[i], n_null, seed + i))
+  field_I <- lapply(fields, function(F) moran_I(F, A))
+  field_BC <- lapply(fields, function(F) apply(F, 2, bimodality_coef))
+  set.seed(seed)
+  out <- lapply(seq_len(kk), function(j) {
+    z <- e$vectors[, j]
+    I0 <- moran_I(matrix(z), A)
+    perm <- moran_I(sapply(seq_len(n_perm), function(b) sample(z)), A)
+    p_order <- (1 + sum(perm >= I0)) / (n_perm + 1)
+    bc0 <- bimodality_coef(z)
+    # Null BCs from continuous fields whose Moran's I is near I0.
+    allI <- unlist(field_I); allBC <- unlist(field_BC)
+    near <- order(abs(allI - I0))[seq_len(n_null)]
+    p_coexist <- (1 + sum(allBC[near] >= bc0)) / (n_null + 1)
+    data.frame(k = j, MoranI = I0, p_order = p_order, BC = bc0, p_coexist = p_coexist,
+               p = max(p_order, p_coexist))
+  })
+  do.call(rbind, out)
+}
+# Regime-level p-value: smallest spike p, Bonferroni over the spikes tested.
+regime_phase_p <- function(tab) if (!nrow(tab)) 1 else min(1, min(tab$p) * nrow(tab))
