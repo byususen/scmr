@@ -204,3 +204,105 @@ phase_order_test <- function(U, n_b, J, A, n_spikes, k = 5L, n_perm = 9999L, n_n
 }
 # Regime-level p-value: smallest spike p, Bonferroni over the spikes tested.
 regime_phase_p <- function(tab) if (!nrow(tab)) 1 else min(1, min(tab$p) * nrow(tab))
+
+# ---------------------------------------------------------------------------
+# Number of coexisting phases. The spatially ordered spikes of a regime are
+# analysed jointly: with r ordered spikes, the m x r matrix of unit loadings
+# (columns scaled to unit variance) is split by k-means for k = 2..k_max and the
+# between-cluster share of variance T_k is compared with its distribution under
+# *continuous* ordered fields (independent Gaussian SAR fields on the same graph,
+# each matched to the Moran's I of one loading column). Discrete sub-regimes
+# (q coexisting phases) give well-separated clusters; a gradient or wave does
+# not. p = min_k p_k * (k_max - 1); the estimated number of phases is the k with
+# the largest standardized excess among the significant k (1 if none).
+phase_count_test <- function(U, n_b, J, A, n_spikes, k_spikes = 5L, k_max = 4L, n_perm = 9999L,
+                             n_null = 199L, alpha_order = 0.05, ridge = 1e-3, seed = 1L) {
+  m <- nrow(U); nbar <- mean(n_b)
+  A <- as.matrix(A); diag(A) <- 0
+  empty <- list(r = 0L, p = 1, phases = 1L, spikes = data.frame(), Tk = data.frame())
+  kk <- min(k_spikes, max(n_spikes, 0L), m - 1L)
+  if (kk < 1L) return(empty)
+  ev <- eigen(J * nbar, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (U * sqrt(nbar / n_b)) %*% Wh
+  e <- eigen(tcrossprod(W) / m, symmetric = TRUE)
+  set.seed(seed)
+  sp <- do.call(rbind, lapply(seq_len(kk), function(j) {
+    z <- e$vectors[, j]
+    I0 <- moran_I(matrix(z), A)
+    perm <- moran_I(sapply(seq_len(n_perm), function(b) sample(z)), A)
+    data.frame(k = j, MoranI = I0, p_order = (1 + sum(perm >= I0)) / (n_perm + 1))
+  }))
+  ord <- sp$k[sp$p_order < alpha_order]
+  out <- list(r = length(ord), p = 1, phases = 1L, spikes = sp, Tk = data.frame())
+  if (!length(ord)) return(out)
+  L <- scale(e$vectors[, ord, drop = FALSE])
+  ks <- 2:min(k_max, m - 1L)
+  between <- function(X) vapply(ks, function(k) {
+    km <- stats::kmeans(X, centers = k, nstart = 10L, iter.max = 50L)
+    km$betweenss / km$totss
+  }, numeric(1))
+  T_obs <- between(L)
+  # Continuous null: SAR fields matched column by column on Moran's I.
+  rhos <- c(0, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 0.98)
+  pool <- do.call(cbind, lapply(seq_along(rhos), function(i) sar_fields(A, rhos[i], n_null, seed + 10L * i)))
+  pool_I <- moran_I(pool, A)
+  near <- lapply(sp$MoranI[match(ord, sp$k)], function(I0) order(abs(pool_I - I0))[seq_len(2L * n_null)])
+  T_null <- t(vapply(seq_len(n_null), function(b) {
+    X <- scale(sapply(near, function(ix) pool[, ix[sample.int(length(ix), 1L)]]))
+    between(matrix(X, nrow = m))
+  }, numeric(length(ks))))
+  if (length(ks) == 1L) T_null <- matrix(T_null, ncol = 1L)
+  p_k <- vapply(seq_along(ks), function(i) (1 + sum(T_null[, i] >= T_obs[i])) / (n_null + 1), numeric(1))
+  z_k <- (T_obs - colMeans(T_null)) / apply(T_null, 2, stats::sd)
+  sig <- which(p_k < 0.05)
+  out$p <- min(1, min(p_k) * length(ks))
+  out$phases <- if (out$p < 0.05 && length(sig)) ks[sig[which.max(z_k[sig])]] else 1L
+  out$Tk <- data.frame(k = ks, T_obs = T_obs, T_null_mean = colMeans(T_null), z = z_k, p = p_k)
+  out
+}
+
+# ---------------------------------------------------------------------------
+# Projected dip rule. Among the spatially ordered spikes of a regime, test the
+# unit loadings for multimodality with Hartigan's dip test, which is calibrated
+# against the uniform, the least favourable unimodal law (Hartigan & Hartigan
+# 1985). A smooth gradient gives ordered but unimodal (at most uniform-like)
+# loadings; coexisting discrete phases give multimodal loadings. Projections
+# tested: each ordered loading column and, when r >= 2, each principal axis of
+# the ordered loadings (cf. projected dip-means, Kalogeratos & Likas 2012;
+# Chamalis & Likas 2018). p = min p * number of projections.
+phase_dip_test <- function(U, n_b, J, A, n_spikes, k_spikes = 5L, n_perm = 9999L,
+                           alpha_order = 0.05, ridge = 1e-3, seed = 1L) {
+  m <- nrow(U); nbar <- mean(n_b)
+  A <- as.matrix(A); diag(A) <- 0
+  kk <- min(k_spikes, max(n_spikes, 0L), m - 1L)
+  res <- list(r = 0L, p = 1, n_proj = 0L, spikes = data.frame())
+  if (kk < 1L || m < 6L) return(res)
+  ev <- eigen(J * nbar, symmetric = TRUE)
+  keep <- ev$values > ridge * max(ev$values)
+  Wh <- ev$vectors[, keep, drop = FALSE] %*% diag(1 / sqrt(ev$values[keep]), sum(keep))
+  W <- (U * sqrt(nbar / n_b)) %*% Wh
+  e <- eigen(tcrossprod(W) / m, symmetric = TRUE)
+  set.seed(seed)
+  sp <- do.call(rbind, lapply(seq_len(kk), function(j) {
+    z <- e$vectors[, j]
+    I0 <- moran_I(matrix(z), A)
+    perm <- moran_I(sapply(seq_len(n_perm), function(b) sample(z)), A)
+    data.frame(k = j, MoranI = I0, p_order = (1 + sum(perm >= I0)) / (n_perm + 1),
+               p_dip = diptest::dip.test(z)$p.value)
+  }))
+  ord <- sp$k[sp$p_order < alpha_order]
+  res$spikes <- sp; res$r <- length(ord)
+  if (!length(ord)) return(res)
+  L <- e$vectors[, ord, drop = FALSE]
+  projs <- list(); for (j in seq_along(ord)) projs[[length(projs) + 1L]] <- L[, j]
+  if (length(ord) >= 2L) {
+    pc <- stats::prcomp(L, center = TRUE, scale. = TRUE)$x
+    for (j in seq_len(ncol(pc))) projs[[length(projs) + 1L]] <- pc[, j]
+  }
+  pd <- vapply(projs, function(z) diptest::dip.test(z)$p.value, numeric(1))
+  res$n_proj <- length(pd)
+  res$p <- min(1, min(pd) * length(pd))
+  res
+}
